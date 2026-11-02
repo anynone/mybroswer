@@ -8,12 +8,56 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron . --smoke",
-    "shot": "electron . --shot"
+    "shot": "electron . --shot",
+    "dist": "electron-builder --publish never"
   },
   "devDependencies": {
-    "electron": "45.2.1"
+    "electron": "45.2.1",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "adm-zip": "^0.6.1"
+  },
+  "build": {
+    "appId": "com.polaris.browser",
+    "productName": "Polaris",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "ui/**/*",
+      "extensions.json",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   }
 }
