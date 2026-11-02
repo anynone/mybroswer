@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>版本信息</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 40px 20px;
+      background: #f8f9fa;
+      font: 14px/1.7 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 500; margin: 0 0 20px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e8eaed; border-radius: 12px; overflow: hidden; }
+    td { padding: 10px 16px; border-bottom: 1px solid #f1f3f4; vertical-align: top; }
+    td:first-child { color: #5f6368; width: 180px; }
+    td.mono { font-family: Consolas, monospace; font-size: 12.5px; word-break: break-all; }
+    pre {
+      margin: 16px 0 0; padding: 14px 16px; background: #202124; color: #9ee493;
+      border-radius: 10px; font: 12px/1.6 Consolas, monospace; overflow: auto; user-select: text;
+    }
+    h2 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>版本信息</h1>
+    <table id="tbl"></table>
+    <h2>Client Hints（userAgentMetadata，与真实 Chrome 一致）</h2>
+    <pre id="ch">加载中…</pre>
+  </main>
+  <script>
+    (function () {
+      window.polaris.info().then(function (info) {
+        var rows = [
+          ['应用', info.app],
+          ['Chromium 内核', info.chromeVersion],
+          ['Electron', info.electronVersion],
+          ['Node', info.nodeVersion],
+          ['平台', info.platform],
+          ['生效 User-Agent', info.userAgent],
+          ['生效时区', info.timezone || '跟随系统'],
+          ['系统时区', info.systemTimezone]
+        ];
+        var html = '';
+        rows.forEach(function (r) {
+          html += '<tr><td>' + r[0] + '</td><td class="mono">' + String(r[1]).replace(/</g, '&lt;') + '</td></tr>';
+        });
+        document.getElementById('tbl').innerHTML = html;
+        document.getElementById('ch').textContent =
+          info.userAgentMetadata ? JSON.stringify(info.userAgentMetadata, null, 2) : '（自定义 UA 模式，未注入 Client Hints）';
+      });
+    })();
+  </script>
+</body>
+</html>

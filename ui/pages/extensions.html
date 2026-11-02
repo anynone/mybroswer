@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>扩展管理</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 36px 20px;
+      background: #f8f9fa;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 500; margin: 0 0 20px; }
+    h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+    .card {
+      background: #fff; border: 1px solid #e8eaed; border-radius: 12px;
+      padding: 18px 20px; margin-bottom: 16px;
+    }
+    .hint { color: #5f6368; font-size: 12.5px; margin: 0 0 12px; }
+    .row { display: flex; gap: 10px; }
+    input[type="text"] {
+      flex: 1; padding: 9px 12px; border: 1px solid #dadce0; border-radius: 8px;
+      font: inherit; outline: 0; background: #fff;
+    }
+    input[type="text"]:focus { border-color: #1a73e8; }
+    button {
+      padding: 8px 18px; border: 0; border-radius: 18px; cursor: pointer;
+      background: #1a73e8; color: #fff; font: inherit; white-space: nowrap;
+    }
+    button:hover { background: #1765cc; }
+    button.ghost {
+      background: #fff; color: #1a73e8; border: 1px solid #dadce0;
+    }
+    button.ghost:hover { background: #f1f3f4; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      padding: 7px 14px; border: 1px solid #dadce0; border-radius: 16px;
+      background: #fff; color: #202124; cursor: pointer; font: inherit;
+    }
+    .chip:hover { border-color: #1a73e8; color: #1a73e8; background: #e8f0fe; }
+    #msg { font-size: 13px; margin: 12px 0 0; min-height: 20px; }
+    #msg.ok { color: #188038; }
+    #msg.err { color: #d93025; }
+    .ext-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 4px; border-bottom: 1px solid #f1f3f4;
+    }
+    .ext-item:last-child { border-bottom: 0; }
+    .ext-ico {
+      width: 36px; height: 36px; flex: none; border-radius: 50%;
+      background: #e8f0fe; color: #1a73e8; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    .ext-ico img { width: 28px; height: 28px; }
+    .ext-meta { flex: 1; min-width: 0; }
+    .ext-name { font-weight: 600; }
+    .ext-name .ver { color: #5f6368; font-weight: 400; font-size: 12px; margin-left: 6px; }
+    .ext-desc {
+      color: #5f6368; font-size: 12.5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ext-item button.remove {
+      background: none; color: #d93025; border: 0; padding: 6px 10px;
+    }
+    .ext-item button.remove:hover { background: #fce8e6; border-radius: 14px; }
+    .empty { color: #5f6368; font-size: 13px; padding: 16px 0; text-align: center; }
+    .note {
+      background: #fef7e0; border: 1px solid #fdd663; border-radius: 10px;
+      padding: 10px 14px; font-size: 12.5px; color: #5f6368; margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>扩展管理</h1>
+
+    <div class="note">
+      基于 Chromium 内核的扩展子系统（支持常用扩展 API 子集）。Manifest V3 后台 Service Worker 类扩展的部分功能可能受限；
+      从商店安装需要能访问 Google 服务，无法访问时可在商店网页手动下载 .crx 后本地安装。
+    </div>
+
+    <section class="card">
+      <h2>从 Chrome 应用商店安装</h2>
+      <p class="hint">粘贴扩展的商店链接或 32 位扩展 ID（在商店页面上点"添加至 Chrome"无效，请复制地址栏链接到此处安装）。</p>
+      <div class="row">
+        <input id="store-input" type="text" spellcheck="false"
+               placeholder="https://chromewebstore.google.com/detail/…/扩展ID">
+        <button id="btn-store">安装</button>
+        <button id="btn-open-store" class="ghost" title="在标签页打开商店浏览">打开商店</button>
+      </div>
+      <div id="msg"></div>
+    </section>
+
+    <section class="card">
+      <h2>本地安装</h2>
+      <p class="hint">支持 .crx 安装包、.zip 压缩包，以及已解包的扩展目录（含 manifest.json）。</p>
+      <div class="row">
+        <button id="btn-file" class="ghost">选择 .crx / .zip 文件…</button>
+        <button id="btn-dir" class="ghost">选择已解包目录…</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>常用扩展快捷安装</h2>
+      <div class="chips" id="featured"></div>
+    </section>
+
+    <section class="card">
+      <h2>已安装</h2>
+      <div id="installed"></div>
+    </section>
+  </main>
+
+  <script>
+    'use strict';
+    /* global polaris */
+    const $ = (s) => document.querySelector(s);
+    const msg = $('#msg');
+
+    const FEATURED = [
+      { name: 'uBlock Origin', id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm' },
+      { name: 'Tampermonkey', id: 'dhdgffkkebhmkfjojejmpbldmpobfkfo' },
+      { name: 'Dark Reader', id: 'eimadpbcbfnmbkopoojekhmlnhkjmkkc' },
+      { name: 'Vue Devtools', id: 'nhdogjmejiglipccpnnnanhbledajbpd' },
+      { name: 'React Devtools', id: 'fmkadmapgofadopljbjfkapdkoienihi' },
+    ];
+
+    function show(kind, text) {
+      msg.className = kind;
+      msg.textContent = text || '';
+    }
+
+    async function installStore(input, btn) {
+      if (!input) return;
+      const old = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = '安装中…'; }
+      show('', '');
+      try {
+        const r = await polaris.ext.installStore(input);
+        if (r && r.ok) show('ok', `安装成功：${r.manifest ? r.manifest.name : r.name || input}`);
+        else if (!(r && r.canceled)) show('err', (r && r.error) || '安装失败');
+      } catch (err) {
+        show('err', String(err && err.message || err));
+      }
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+      render();
+    }
+
+    async function render() {
+      let list = [];
+      try { list = await polaris.ext.list(); } catch (err) { /* ignore */ }
+
+      const box = $('#installed');
+      box.innerHTML = '';
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">还没有安装任何扩展</div>';
+        return;
+      }
+      for (const x of list) {
+        const item = document.createElement('div');
+        item.className = 'ext-item';
+
+        const ico = document.createElement('div');
+        ico.className = 'ext-ico';
+        if (x.icon) {
+          const img = document.createElement('img');
+          img.src = x.icon;
+          ico.appendChild(img);
+        } else {
+          ico.textContent = (x.name || '?').charAt(0).toUpperCase();
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'ext-meta';
+        const nm = document.createElement('div');
+        nm.className = 'ext-name';
+        nm.textContent = x.name || x.id;
+        if (x.version) {
+          const v = document.createElement('span');
+          v.className = 'ver';
+          v.textContent = 'v' + x.version;
+          nm.appendChild(v);
+        }
+        const ds = document.createElement('div');
+        ds.className = 'ext-desc';
+        ds.textContent = x.description || x.id;
+        meta.appendChild(nm);
+        meta.appendChild(ds);
+
+        const rm = document.createElement('button');
+        rm.className = 'remove';
+        rm.textContent = '移除';
+        rm.onclick = async () => {
+          const r = await polaris.ext.remove(x.id);
+          if (r && r.ok) render();
+        };
+
+        item.appendChild(ico);
+        item.appendChild(meta);
+        item.appendChild(rm);
+        box.appendChild(item);
+      }
+    }
+
+    function init() {
+      $('#btn-store').onclick = () => installStore($('#store-input').value.trim(), $('#btn-store'));
+      $('#store-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') installStore($('#store-input').value.trim(), $('#btn-store'));
+      });
+      $('#btn-open-store').onclick = () =>
+        polaris.tabs.create('https://chromewebstore.google.com/');
+      $('#btn-file').onclick = async () => {
+        const r = await polaris.ext.installFile();
+        if (r && r.ok) show('ok', '安装成功');
+        else if (r && r.error) show('err', r.error);
+        render();
+      };
+      $('#btn-dir').onclick = async () => {
+        const r = await polaris.ext.installDir();
+        if (r && r.ok) show('ok', '安装成功');
+        else if (r && r.error) show('err', r.error);
+        render();
+      };
+
+      const chips = $('#featured');
+      for (const f of FEATURED) {
+        const c = document.createElement('button');
+        c.className = 'chip';
+        c.textContent = f.name;
+        c.onclick = () => installStore(f.id, c);
+        chips.appendChild(c);
+      }
+
+      render();
+      polaris.onExtChanged(render);
+    }
+
+    init();
+  </script>
+</body>
+</html>

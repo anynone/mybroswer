@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 测试/诊断输出
+smoke-result.json
+polaris-diag.log
+*.log
+
+# 调试临时文件（排查过程产生的 tmp-*.js、抓取的检测站源码等）
+tmp-*.js
+detector.js
+site.html
+shot-*.png
+*.png.tmp
+
+# 运行时数据
+userData/
+
+# 编辑器与系统杂项
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini

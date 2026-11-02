@@ -1,0 +1,19 @@
+{
+  "name": "polaris-browser",
+  "productName": "Polaris 浏览器",
+  "version": "0.1.0",
+  "description": "基于最新 Chromium 内核的自定义浏览器：User-Agent/请求头与真实 Chrome 完全一致，支持自定义时区（不跟随系统时区）",
+  "main": "src/main/main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "shot": "electron . --shot"
+  },
+  "devDependencies": {
+    "electron": "45.2.1"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1"
+  }
+}

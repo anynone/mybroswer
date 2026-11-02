@@ -1,0 +1,448 @@
+* { box-sizing: border-box; user-select: none; }
+
+html, body {
+  margin: 0;
+  height: 84px;              /* 基础高度：tabstrip(40)+toolbar(44)；书签栏显示时 body 加 .with-bm（114px） */
+  overflow: hidden;
+  font: 13px/1.4 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  color: #202124;
+  background: #dee1e6;
+}
+body.with-bm { height: 114px; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+button svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+
+/* ---------- 标签栏 ---------- */
+/* 整条空白区可拖动窗口（Windows 覆盖层按钮在最右侧原生绘制，CSS 已预留空间） */
+#tabstrip {
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  padding: 7px 148px 0 8px;   /* 右侧 148px 留给窗口控制按钮 */
+  gap: 6px;
+  -webkit-app-region: drag;
+}
+
+#tabs {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Chrome 标签造型：圆角顶 + 活动页底部外扩弧脚 + 非活动页细分隔线 */
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 33px;
+  min-width: 90px;
+  max-width: 240px;
+  flex: 1 1 180px;
+  padding: 0 6px 0 12px;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: #3c4043;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.tab:hover { background: #e2e6ea; }
+
+.tab.active {
+  background: #fff;
+  color: #202124;
+}
+/* 底部外扩弧脚：与工具栏无缝衔接的 Chrome 特征轮廓 */
+.tab.active::before,
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
+.tab.active::before {
+  left: -10px;
+  background: radial-gradient(circle at 0 0, transparent 10px, #fff 10.5px);
+}
+.tab.active::after {
+  right: -10px;
+  background: radial-gradient(circle at 100% 0, transparent 10px, #fff 10.5px);
+}
+
+/* 非活动页之间的细分隔线（紧邻活动页时不显示） */
+.tab:not(.active)::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 10px;
+  bottom: 9px;
+  width: 1px;
+  background: #b9bec4;
+  opacity: 0.8;
+}
+.tab.active + .tab:not(.active)::after { display: none; }
+.tab:not(.active):hover::after { opacity: 0; }
+
+.tab .fav {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #5f6368;
+}
+.tab .fav img { width: 16px; height: 16px; }
+.tab .fav.letter { font-weight: 600; }
+/* 加载中：favicon 位置为蓝色旋转指示（Chrome 同款反馈） */
+.tab .fav.spinner { color: #1a73e8; }
+.tab .fav.spinner svg { width: 14px; height: 14px; fill: currentColor; }
+body.incognito .tab .fav.spinner { color: #8ab4f8; }
+
+.tab .title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.tab .x {
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  flex: none;
+  border-radius: 50%;
+  color: #5f6368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+}
+.tab .x svg { width: 16px; height: 16px; fill: currentColor; }
+.tab:hover .x, .tab.active .x { visibility: visible; }
+.tab .x:hover { background: #dadce0; color: #202124; }
+
+.tab.loading .title { color: #1a73e8; }
+
+#btn-newtab {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 3px;
+  flex: none;
+  border-radius: 50%;
+  color: #5f6368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+#btn-newtab svg { width: 18px; height: 18px; fill: currentColor; }
+#btn-newtab:hover { background: #d5d9de; }
+
+/* ---------- 工具栏 ---------- */
+#toolbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  background: #fff;
+}
+
+@keyframes polspin { to { transform: rotate(360deg); } }
+
+button svg.spin,
+svg.spin {
+  animation: polspin .7s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nav:active:not(:disabled) { transform: scale(0.92); }
+#btn-menu:active, #btn-newtab:active, #btn-ext:active, .ext-ico:active { transform: scale(0.92); }
+
+.nav {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  border-radius: 50%;
+  color: #5f6368;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav svg { width: 18px; height: 18px; fill: currentColor; }
+.nav:hover:not(:disabled) { background: #f1f3f4; }
+.nav:disabled { opacity: 0.35; cursor: default; }
+/* 加载中：刷新位置显示蓝色旋转指示 */
+#btn-reload.loading { color: #1a73e8; }
+#btn-reload.loading:hover { background: #e8f0fe; }
+
+#address-wrap {
+  flex: 1;
+  height: 30px;
+  margin: 0 6px;
+  display: flex;
+  align-items: center;
+  background: #f1f3f4;
+  border-radius: 15px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  min-width: 0;
+}
+#address-wrap:focus-within {
+  background: #fff;
+  border-color: #1a73e8;
+  box-shadow: 0 1px 4px rgba(26, 115, 232, 0.3);
+}
+#lock {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  color: #5f6368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#lock svg { width: 16px; height: 16px; fill: currentColor; }
+#address {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: 13px "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  color: #202124;
+  user-select: text;
+}
+#btn-star {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: -4px;
+  margin-left: 4px;
+  border-radius: 50%;
+  color: #5f6368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#btn-star svg { width: 16px; height: 16px; fill: currentColor; }
+#btn-star:hover { background: #dadce0; }
+#btn-star.on { color: #1a73e8; }
+#btn-star.on svg { fill: #1a73e8; }
+
+/* 地址栏内缩放指示（Chrome：缩放 ≠100% 才出现，点击复位） */
+#zoom-chip {
+  flex: none;
+  height: 22px;
+  margin-right: -2px;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1;
+  color: #5f6368;
+  background: #e8eaed;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+#zoom-chip svg { width: 14px; height: 14px; fill: currentColor; }
+#zoom-chip:hover { background: #dadce0; }
+#zoom-chip.hidden { display: none; }
+body.incognito #zoom-chip { background: #3c4043; color: #e8eaed; }
+body.incognito #zoom-chip:hover { background: #4a4d51; }
+
+#tz-chip {
+  height: 26px;
+  padding: 0 12px;
+  margin-left: 4px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 13px;
+  background: #f1f3f4;
+  color: #5f6368;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#tz-chip .tz-ico { flex: none; width: 14px; height: 14px; display: inline-flex; }
+#tz-chip .tz-ico svg { width: 14px; height: 14px; fill: currentColor; }
+#tz-chip #tz-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#tz-chip:hover { background: #e8eaed; color: #1a73e8; }
+#tz-chip.custom { background: #e8f0fe; color: #1a73e8; }
+
+#btn-menu {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  border-radius: 50%;
+  color: #5f6368;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#btn-menu svg { width: 18px; height: 18px; fill: currentColor; transition: transform .18s ease, opacity .18s ease; }
+#btn-menu .ic-open { display: none; }
+#btn-menu:hover { background: #f1f3f4; }
+/* 菜单打开态：⋮ 渐变为三叶图标（与 Chrome 一致的打开反馈） */
+#btn-menu.open { color: #1a73e8; background: #e8f0fe; }
+#btn-menu.open .ic-dots { display: none; }
+#btn-menu.open .ic-open { display: block; transform: rotate(120deg); }
+
+/* ---------- 扩展区 ---------- */
+#ext-bar { display: flex; align-items: center; gap: 1px; margin-left: 2px; flex: none; max-width: 220px; overflow: hidden; }
+#btn-ext {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 50%;
+  color: #5f6368;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#btn-ext svg { width: 18px; height: 18px; fill: currentColor; }
+#btn-ext:hover { background: #f1f3f4; }
+#ext-icons { display: flex; align-items: center; gap: 1px; }
+.ext-ico {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: #5f6368;
+}
+.ext-ico:hover { background: #f1f3f4; }
+.ext-ico img { width: 16px; height: 16px; }
+
+/* ---------- 书签栏 ---------- */
+#bm-bar {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  background: #fff;
+  border-bottom: 1px solid #e8eaed;
+  overflow: hidden;
+}
+#bm-bar.hidden { display: none; }
+.bm-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #3c4043;
+  font-size: 12px;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  flex: none;
+  cursor: pointer;
+}
+.bm-item:hover { background: #f1f3f4; }
+.bm-item .fav { width: 14px; height: 14px; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #5f6368; }
+.bm-item .fav img { width: 14px; height: 14px; }
+.bm-item .t { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 查找栏 ---------- */
+#findbar {
+  position: fixed;
+  top: 44px;
+  right: 8px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 12px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  z-index: 20;
+}
+#findbar.hidden { display: none; }
+#find-input {
+  width: 190px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: 13px "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  color: #202124;
+  user-select: text;
+}
+#find-count { color: #5f6368; font-size: 12px; min-width: 44px; text-align: center; }
+#findbar button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #5f6368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#findbar button svg { width: 16px; height: 16px; fill: currentColor; }
+#findbar button:hover { background: #f1f3f4; }
+
+/* ---------- 隐身窗口配色（深色 Chrome） ---------- */
+body.incognito { background: #35363a; color: #e8eaed; }
+body.incognito .tab { color: #bdc1c6; }
+body.incognito .tab:hover { background: #46474b; }
+body.incognito .tab.active { background: #202124; color: #e8eaed; }
+body.incognito .tab.active::before { background: radial-gradient(circle at 0 0, transparent 10px, #202124 10.5px); }
+body.incognito .tab.active::after { background: radial-gradient(circle at 100% 0, transparent 10px, #202124 10.5px); }
+body.incognito .tab:not(.active)::after { background: #5f6368; }
+body.incognito .tab .x { color: #bdc1c6; }
+body.incognito .tab .x:hover { background: #5f6368; color: #fff; }
+body.incognito #btn-newtab { color: #bdc1c6; }
+body.incognito #btn-newtab:hover { background: #46474b; }
+body.incognito #toolbar { background: #202124; }
+body.incognito .nav, body.incognito #btn-menu, body.incognito #btn-ext, body.incognito .ext-ico { color: #bdc1c6; }
+body.incognito .nav:hover:not(:disabled), body.incognito #btn-menu:hover,
+body.incognito #btn-ext:hover, body.incognito .ext-ico:hover { background: #3c4043; }
+body.incognito #btn-menu.open { color: #8ab4f8; background: #284256; }
+body.incognito #address-wrap { background: #35363a; }
+body.incognito #address-wrap:focus-within { background: #202124; border-color: #8ab4f8; }
+body.incognito #address { color: #e8eaed; }
+body.incognito #lock, body.incognito #btn-star { color: #bdc1c6; }
+body.incognito #btn-star:hover { background: #3c4043; }
+body.incognito #btn-star.on { color: #8ab4f8; }
+body.incognito #btn-star.on svg { fill: #8ab4f8; }
+body.incognito #tz-chip { background: #35363a; color: #bdc1c6; }
+body.incognito #tz-chip:hover { background: #3c4043; color: #8ab4f8; }
+body.incognito #tz-chip.custom { background: #284256; color: #8ab4f8; }
+body.incognito #findbar { background: #292a2d; border-color: #3c4043; color: #e8eaed; }
+body.incognito #find-input { color: #e8eaed; }
+body.incognito #findbar button:hover { background: #3c4043; }
+body.incognito #bm-bar { background: #202124; border-bottom-color: #3c4043; }
+body.incognito .bm-item { color: #bdc1c6; }
+body.incognito .bm-item:hover { background: #3c4043; }

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>新标签页</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+      background: linear-gradient(160deg, #f8f9ff 0%, #eef2fb 100%);
+      user-select: none;
+    }
+    main { text-align: center; padding: 48px 24px; width: 720px; max-width: 92vw; }
+    #clock { font-size: 64px; font-weight: 300; letter-spacing: 2px; color: #1a1a1a; }
+    #date { margin-top: 4px; color: #5f6368; font-size: 16px; }
+    #tz {
+      display: inline-block; margin-top: 10px; padding: 4px 14px;
+      border-radius: 14px; background: #e8f0fe; color: #1a73e8; font-size: 13px;
+    }
+    #q {
+      width: 100%; margin-top: 34px; height: 46px; padding: 0 22px;
+      border: 1px solid #dfe1e5; border-radius: 23px; outline: 0;
+      font-size: 15px; color: #202124; background: #fff;
+      box-shadow: 0 1px 6px rgba(32, 33, 36, 0.12);
+      user-select: text;
+    }
+    #q:focus { border-color: #1a73e8; box-shadow: 0 1px 8px rgba(26, 115, 232, 0.35); }
+    #links { margin-top: 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .tile {
+      padding: 14px 6px; border-radius: 10px; background: #fff;
+      border: 1px solid #eceef2; cursor: pointer; font-size: 13px; color: #3c4043;
+      transition: box-shadow 0.15s;
+    }
+    .tile:hover { box-shadow: 0 2px 10px rgba(32, 33, 36, 0.14); }
+    .tile b { display: block; font-size: 15px; color: #1a73e8; margin-bottom: 2px; }
+    #meta { margin-top: 36px; color: #9aa0a6; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="clock">--:--:--</div>
+    <div id="date"></div>
+    <div id="tz"></div>
+    <input id="q" type="text" placeholder="搜索或输入网址，回车访问" autocomplete="off" spellcheck="false">
+    <div id="links">
+      <div class="tile" data-url="www.baidu.com"><b>百度</b>.baidu.com</div>
+      <div class="tile" data-url="cn.bing.com"><b>必应</b>cn.bing.com</div>
+      <div class="tile" data-url="www.zhihu.com"><b>知乎</b>zhihu.com</div>
+      <div class="tile" data-url="www.bilibili.com"><b>哔哩哔哩</b>bilibili.com</div>
+      <div class="tile" data-url="www.weibo.com"><b>微博</b>weibo.com</div>
+      <div class="tile" data-url="www.taobao.com"><b>淘宝</b>taobao.com</div>
+      <div class="tile" data-url="github.com"><b>GitHub</b>github.com</div>
+      <div class="tile" data-url="juejin.cn"><b>掘金</b>juejin.cn</div>
+    </div>
+    <div id="meta"></div>
+  </main>
+  <script>
+    (function () {
+      var clockEl = document.getElementById('clock');
+      var dateEl = document.getElementById('date');
+      function tick() {
+        var d = new Date();
+        clockEl.textContent = d.toLocaleTimeString('zh-CN', { hour12: false });
+        dateEl.textContent = d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+      }
+      setInterval(tick, 1000);
+      tick();
+
+      document.getElementById('q').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && this.value.trim() && window.polaris) {
+          window.polaris.tabs.navigateCurrent(this.value.trim());
+        }
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.tile'), function (t) {
+        t.onclick = function () {
+          if (window.polaris) window.polaris.tabs.navigateCurrent(t.getAttribute('data-url'));
+        };
+      });
+      if (window.polaris) {
+        window.polaris.settings.get().then(function (s) {
+          var tzEl = document.getElementById('tz');
+          tzEl.textContent = s.timezone ? ('时区: ' + s.timezone + '（自定义）') : ('时区: 跟随系统 · ' + s.info.systemTimezone);
+          document.getElementById('meta').textContent =
+            'Chromium ' + s.info.chromeVersion + ' · UA 与 Chrome 一致 · 点击右上角时区标签可修改时区';
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

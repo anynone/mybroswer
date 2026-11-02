@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>任务管理器</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 30px 20px;
+      background: #f8f9fa;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+    }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+    .hint { color: #5f6368; font-size: 12.5px; margin: 0 0 16px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e8eaed; border-radius: 12px; overflow: hidden; }
+    th, td { padding: 9px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #f1f3f4; }
+    th { background: #f8f9fa; color: #5f6368; font-weight: 600; user-select: none; }
+    tr:last-child td { border-bottom: 0; }
+    td.num { font-variant-numeric: tabular-nums; }
+    td button {
+      padding: 4px 12px; border: 1px solid #dadce0; border-radius: 14px;
+      background: #fff; cursor: pointer; font: inherit; color: #d93025;
+    }
+    td button:hover { background: #fce8e6; }
+    td button:disabled { color: #bdc1c6; cursor: default; }
+    td button:disabled:hover { background: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>任务管理器</h1>
+    <p class="hint">每 1.5 秒刷新。结束标签页/扩展的渲染进程会使对应页面显示错误页；主进程与 GPU 不可结束。</p>
+    <table>
+      <thead><tr><th>任务</th><th>进程 ID</th><th>内存</th><th>CPU</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <script>
+    (function () {
+      var P = window.polaris;
+      var TYPE_LABEL = {
+        'Browser': '浏览器',
+        'Network Service': '网络服务',
+        'GPU Process': 'GPU 进程',
+        'Utility': '工具进程',
+        'Zygote': 'Zygote',
+        'Tab': '标签页',
+      };
+      function label(t) {
+        if (TYPE_LABEL[t]) return TYPE_LABEL[t];
+        if (t.indexOf('Extension') !== -1) return '扩展：' + t.replace(/^Extension[: ]*/, '');
+        return t;
+      }
+      function render(list) {
+        var box = document.getElementById('rows');
+        box.innerHTML = '';
+        for (var i = 0; i < list.length; i++) {
+          (function (m) {
+            var tr = document.createElement('tr');
+            var isCore = m.type === 'Browser' || m.type === 'GPU Process';
+            tr.innerHTML =
+              '<td>' + label(m.type) + '</td>' +
+              '<td class="num">' + m.pid + '</td>' +
+              '<td class="num">' + m.memoryMB + ' MB</td>' +
+              '<td class="num">' + (m.cpu || 0) + '%</td>' +
+              '<td><button' + (isCore ? ' disabled title="系统关键进程"' : '') + '>结束进程</button></td>';
+            var btn = tr.querySelector('button');
+            if (!isCore) {
+              btn.onclick = function () {
+                P.tasks.kill(m.pid).then(load).catch(function (err) { alert(err.message); });
+              };
+            }
+            box.appendChild(tr);
+          })(list[i]);
+        }
+      }
+      function load() {
+        P.tasks.list().then(render).catch(function () {});
+      }
+      load();
+      setInterval(load, 1500);
+    })();
+  </script>
+</body>
+</html>

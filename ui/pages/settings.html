@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>设置</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 36px 20px;
+      background: #f8f9fa;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 500; margin: 0 0 20px; }
+    h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+    .card {
+      background: #fff; border: 1px solid #e8eaed; border-radius: 12px;
+      padding: 18px 20px; margin-bottom: 16px;
+    }
+    .hint { color: #5f6368; font-size: 12.5px; margin: 0 0 12px; }
+    label.radio { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+    #tz-search, #ua-custom, select {
+      width: 100%; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 8px;
+      font: inherit; outline: 0; background: #fff;
+    }
+    #tz-search:focus, #ua-custom:focus, select:focus { border-color: #1a73e8; }
+    #tz-list {
+      width: 100%; margin-top: 8px; padding: 6px; border: 1px solid #dadce0; border-radius: 8px;
+      font: 13px "Segoe UI", monospace, sans-serif; background: #fff; color: #202124;
+    }
+    #custom-box { margin: 8px 0 0 26px; }
+    #custom-lang-box { margin: 8px 0 0 26px; }
+    #ua-custom { margin: 8px 0 0 26px; width: calc(100% - 26px); font-family: Consolas, monospace; resize: vertical; }
+    .preview { margin-top: 10px; color: #5f6368; font-size: 12.5px; word-break: break-all; }
+    .preview b { color: #1a73e8; }
+    .mono { font-family: Consolas, monospace; font-size: 12px; }
+    .actions { display: flex; align-items: center; gap: 14px; margin: 22px 0; }
+    #save {
+      padding: 9px 22px; border: 0; border-radius: 18px; cursor: pointer;
+      background: #1a73e8; color: #fff; font: inherit;
+    }
+    #save:hover { background: #1765cc; }
+    #msg { font-size: 13px; }
+    #msg.ok { color: #188038; }
+    #msg.err { color: #d93025; }
+    #about { font-size: 12.5px; color: #5f6368; }
+    #about div { padding: 2px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>设置</h1>
+
+    <section class="card">
+      <h2>时区</h2>
+      <p class="hint">页面将完全使用所选时区渲染时间（Date / Intl / 倒计时等），与系统时区无关。修改后立即生效，无需重启浏览器。</p>
+      <label class="radio"><input type="radio" name="tzmode" value="system"> 跟随系统时区（<span id="sys-tz"></span>）</label>
+      <label class="radio"><input type="radio" name="tzmode" value="custom"> 使用自定义时区</label>
+      <div id="custom-box">
+        <input id="tz-search" type="text" placeholder="过滤时区：Shanghai / New_York / Tokyo / London …" spellcheck="false">
+        <select id="tz-list" size="10"></select>
+        <div class="preview">预览（所选时区当前时间）：<b id="tz-preview"></b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>User-Agent / 请求头</h2>
+      <label class="radio"><input type="radio" name="uamode" value="chrome"> 与 Chrome 完全一致（推荐）—— 按内置 Chromium 内核版本自动生成，Client Hints（Sec-CH-UA 等）同步一致</label>
+      <label class="radio"><input type="radio" name="uamode" value="custom"> 自定义 User-Agent</label>
+      <textarea id="ua-custom" rows="2" spellcheck="false" placeholder="Mozilla/5.0 ..."></textarea>
+      <div class="preview">当前生效 UA：<span id="ua-current" class="mono"></span></div>
+    </section>
+
+    <section class="card">
+      <h2>浏览器语言</h2>
+      <p class="hint">页面将完全使用所选语言：navigator.language / navigator.languages、Intl 默认语言与 Accept-Language 请求头同步一致，不暴露系统语言。修改立即生效；更深入的覆盖（含 Web Worker）重启浏览器后完全生效。</p>
+      <label class="radio"><input type="radio" name="langmode" value="system"> 跟随系统语言（<span id="sys-lang"></span>）</label>
+      <label class="radio"><input type="radio" name="langmode" value="custom"> 使用自定义语言</label>
+      <div id="custom-lang-box">
+        <select id="lang-list">
+          <option value="zh-CN">简体中文（中国大陆）</option>
+          <option value="zh-TW">繁體中文（台灣）</option>
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="ja-JP">日本語</option>
+          <option value="ko-KR">한국어</option>
+          <option value="de-DE">Deutsch</option>
+          <option value="fr-FR">Français</option>
+          <option value="es-ES">Español</option>
+          <option value="ru-RU">Русский</option>
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="it-IT">Italiano</option>
+          <option value="ar-SA">العربية</option>
+          <option value="th-TH">ไทย</option>
+          <option value="vi-VN">Tiếng Việt</option>
+          <option value="hi-IN">हिन्दी</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>隐私防护</h2>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cb-webrtc" checked> WebRTC 防泄露：拦截页面可见 ICE 候选与 SDP/连接统计中的本机 IP（host/srflx 裸 IP 不放行，连接可能退化为中继；即时生效）</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cb-font" checked> 字体指纹防护：中文字体恒报未安装，标准 Windows 字体集（含 Segoe UI Emoji）正常放行——与 UA 人设一致；Canvas 文本测量量化，字体枚举权限恒拒</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cb-canvas" checked> Canvas 指纹扰动：按种子确定性微扰（同配置指纹稳定，换种子即换指纹）</label>
+      <div style="margin:6px 0 0 0">
+        <button id="reseed" type="button" style="padding:7px 16px;border:1px solid #dadce0;border-radius:16px;background:#fff;cursor:pointer;font:inherit">更换 Canvas 指纹种子</button>
+      </div>
+      <p class="hint" style="margin-top:10px">注：DOM 尺寸式字体探测（offsetWidth 比对）需源码级字体白名单才能完全消除；当前以测量量化 + Canvas 扰动显著降低其区分度。</p>
+    </section>
+
+    <section class="card">
+      <h2>搜索引擎（地址栏）</h2>
+      <select id="engine">
+        <option value="bing">Bing（必应）</option>
+        <option value="baidu">百度</option>
+        <option value="google">Google</option>
+      </select>
+    </section>
+
+    <div class="actions">
+      <button id="save">保存并立即生效</button>
+      <span id="msg"></span>
+    </div>
+
+    <section class="card" id="allow-card">
+      <h2>隐私防护白名单</h2>
+      <p class="hint">白名单内的网站（含其子域名）不启用伪装：直接使用系统时区与系统语言、字体测量不做干预、Canvas 不扰动、WebRTC 不拦截。User-Agent 保持与 Chrome 一致（基础行为，非隐私伪装）。修改即时生效。</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="allow-input" type="text" placeholder="例如 example.com" spellcheck="false"
+               style="flex:1;padding:8px 12px;border:1px solid #dadce0;border-radius:8px;font:inherit;outline:0">
+        <button id="allow-add" type="button"
+                style="padding:8px 18px;border:0;border-radius:16px;background:#1a73e8;color:#fff;cursor:pointer;font:inherit">添加</button>
+      </div>
+      <div id="allow-list" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card" id="clear-card">
+      <h2>清除浏览数据</h2>
+      <p class="hint">可选择清除以下数据。Cookie 与站点数据清除后需要重新登录各网站。</p>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cd-history" checked> 浏览记录</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cd-cache" checked> 缓存的图片和文件</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cd-cookies"> Cookie 及其他网站数据</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cd-downloads"> 下载记录（不删磁盘文件）</label>
+      <label class="radio" style="cursor:default"><input type="checkbox" id="cd-sitedata"> 站点数据（LocalStorage / IndexedDB 等）</label>
+      <div style="margin-top:8px">
+        <button id="btn-clear" type="button" style="padding:8px 20px;border:0;border-radius:18px;background:#1a73e8;color:#fff;cursor:pointer;font:inherit">清除数据</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>关于</h2>
+      <div id="about"></div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var P = window.polaris;
+      var TZS = [];
+      var S = null;
+
+      function $(id) { return document.getElementById(id); }
+
+      function offsetLabel(tz) {
+        try {
+          var s = new Date().toLocaleString('en-US', { timeZone: tz, timeZoneName: 'shortOffset' });
+          var m = s.match(/GMT[+-]\d+(?::\d+)?/);
+          return m ? m[0].replace('GMT', 'UTC') : '';
+        } catch (e) { return ''; }
+      }
+
+      function fillTzList(filter) {
+        var f = (filter || '').toLowerCase();
+        var sel = $('tz-list');
+        var prev = sel.value;
+        sel.innerHTML = '';
+        TZS.forEach(function (tz) {
+          if (f && tz.toLowerCase().indexOf(f) === -1) return;
+          var o = document.createElement('option');
+          o.value = tz;
+          o.textContent = tz + '  (' + offsetLabel(tz) + ')';
+          sel.appendChild(o);
+        });
+        if (prev && TZS.indexOf(prev) !== -1) {
+          try { sel.value = prev; } catch (e) { /* 过滤后不存在 */ }
+        }
+      }
+
+      function tzmode() {
+        return document.querySelector('input[name=tzmode]:checked').value;
+      }
+
+      setInterval(function () {
+        var tz = tzmode() === 'custom' ? $('tz-list').value : undefined;
+        try {
+          $('tz-preview').textContent = new Date().toLocaleString('zh-CN',
+            tz ? { timeZone: tz, hour12: false } : { hour12: false });
+        } catch (e) { /* ignore */ }
+      }, 1000);
+
+      $('tz-search').addEventListener('input', function () { fillTzList(this.value); });
+
+      $('save').onclick = function () {
+        var msg = $('msg');
+        var patch = {
+          timezone: tzmode() === 'custom' ? $('tz-list').value : '',
+          userAgentMode: document.querySelector('input[name=uamode]:checked').value,
+          customUserAgent: $('ua-custom').value,
+          searchEngine: $('engine').value,
+          locale: document.querySelector('input[name=langmode]:checked').value === 'custom'
+            ? $('lang-list').value : 'system',
+          webrtcGuard: $('cb-webrtc').checked,
+          fontGuard: $('cb-font').checked,
+          canvasNoise: $('cb-canvas').checked
+        };
+        if (patch.userAgentMode === 'custom' && !patch.customUserAgent.trim()) {
+          msg.className = 'err';
+          msg.textContent = '自定义 UA 不能为空';
+          return;
+        }
+        P.settings.set(patch).then(function (s) {
+          S = s;
+          refresh();
+          msg.className = 'ok';
+          msg.textContent = '✓ 已保存并立即生效';
+        }).catch(function (err) {
+          msg.className = 'err';
+          msg.textContent = '保存失败：' + err.message;
+        });
+      };
+
+      $('reseed').onclick = function () {
+        var msg = $('msg');
+        P.settings.set({ fpSeed: 1 + Math.floor(Math.random() * 2147483646) }).then(function (s) {
+          S = s;
+          msg.className = 'ok';
+          msg.textContent = '✓ 已更换指纹种子（新打开的页面使用新指纹）';
+        }).catch(function (err) {
+          msg.className = 'err';
+          msg.textContent = '更换失败：' + err.message;
+        });
+      };
+
+      // ---- 隐私白名单（即时生效） ----
+      function saveAllowlist(list) {
+        P.settings.set({ privacyAllowlist: list }).then(function (s) {
+          S = s;
+          renderAllowlist();
+        }).catch(function (err) {
+          var n = $('msg');
+          n.className = 'err';
+          n.textContent = '白名单保存失败：' + err.message;
+        });
+      }
+      function renderAllowlist() {
+        var box = $('allow-list');
+        var list = (S && Array.isArray(S.privacyAllowlist)) ? S.privacyAllowlist : [];
+        box.innerHTML = '';
+        if (!list.length) {
+          box.innerHTML = '<div style="color:#5f6368;font-size:12.5px">暂无白名单站点 —— 所有网站均启用隐私防护</div>';
+          return;
+        }
+        list.forEach(function (d) {
+          var chip = document.createElement('span');
+          chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;' +
+            'margin:2px 6px 2px 0;border-radius:14px;background:#e8f0fe;color:#1a73e8;font-size:12.5px';
+          chip.appendChild(document.createTextNode(d));
+          var del = document.createElement('button');
+          del.textContent = '×';
+          del.title = '移除 ' + d;
+          del.style.cssText = 'border:0;background:none;color:#1a73e8;cursor:pointer;font-size:14px;padding:0 4px';
+          del.onclick = function () {
+            saveAllowlist(list.filter(function (x) { return x !== d; }));
+          };
+          chip.appendChild(del);
+          box.appendChild(chip);
+        });
+      }
+      $('allow-add').onclick = function () {
+        var input = $('allow-input');
+        var v = input.value.trim().toLowerCase();
+        if (!v) return;
+        var list = (S && Array.isArray(S.privacyAllowlist)) ? S.privacyAllowlist.slice() : [];
+        if (list.indexOf(v) === -1) list.push(v);
+        input.value = '';
+        saveAllowlist(list);
+      };
+      $('allow-input').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') $('allow-add').click();
+      });
+
+      $('btn-clear').onclick = function () {        P.clearData({
+          history: $('cd-history').checked,
+          cache: $('cd-cache').checked,
+          cookies: $('cd-cookies').checked,
+          downloads: $('cd-downloads').checked,
+          siteData: $('cd-sitedata').checked,
+        }).then(function () {
+          var c = $('clear-card');
+          c.style.transition = 'background .4s';
+          c.style.background = '#e6f4ea';
+          setTimeout(function () { c.style.background = '#fff'; }, 800);
+          var n = $('msg');
+          n.className = 'ok';
+          n.textContent = '✓ 已清除所选数据';
+        }).catch(function (err) {
+          var n = $('msg');
+          n.className = 'err';
+          n.textContent = '清除失败：' + err.message;
+        });
+      };
+
+      function refresh() {
+        $('ua-current').textContent = S.info.userAgent;
+        $('sys-tz').textContent = S.info.systemTimezone;
+        $('sys-lang').textContent = S.info.systemLocale || '未知';
+        $('about').innerHTML =
+          '<div>应用：' + S.info.app + '</div>' +
+          '<div>Chromium 内核：' + S.info.chromeVersion + '</div>' +
+          '<div>Electron：' + S.info.electronVersion + ' · Node：' + S.info.nodeVersion + '</div>' +
+          '<div>当前时区：' + (S.timezone || '跟随系统（' + S.info.systemTimezone + '）') + '</div>' +
+          '<div>当前语言：' + (S.locale && S.locale !== 'system' ? S.locale : '跟随系统（' + (S.info.systemLocale || '') + '）') + '</div>';
+      }
+
+      P.settings.get().then(function (s) {
+        S = s;
+        if (location.hash === '#clear') {
+          try { $('clear-card').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* ignore */ }
+        }
+        var mode = s.timezone ? 'custom' : 'system';
+        document.querySelector('input[name=tzmode][value="' + mode + '"]').checked = true;
+        var um = s.userAgentMode === 'custom' ? 'custom' : 'chrome';
+        document.querySelector('input[name=uamode][value="' + um + '"]').checked = true;
+        var lm = s.locale && s.locale !== 'system' ? 'custom' : 'system';
+        document.querySelector('input[name=langmode][value="' + lm + '"]').checked = true;
+        $('ua-custom').value = s.customUserAgent || '';
+        $('engine').value = s.searchEngine || 'bing';
+        $('cb-webrtc').checked = s.webrtcGuard !== false;
+        $('cb-font').checked = s.fontGuard !== false;
+        $('cb-canvas').checked = s.canvasNoise !== false;
+        renderAllowlist();
+        if (lm === 'custom' && s.locale) {
+          try { $('lang-list').value = s.locale; } catch (e) { /* ignore */ }
+        }
+        refresh();
+        return P.settings.timezones();
+      }).then(function (list) {
+        TZS = list || [];
+        fillTzList('');
+        if (S.timezone) {
+          try { $('tz-list').value = S.timezone; } catch (e) { /* ignore */ }
+        }
+      });
+
+      P.onSettingsChanged(function (s) { S = s; refresh(); renderAllowlist(); });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>历史记录</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 30px 20px;
+      background: #f8f9fa;
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      color: #202124;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; font-weight: 500; margin: 0 0 16px; display: flex; align-items: center; gap: 12px; }
+    h1 .sp { flex: 1; }
+    #clear-btn {
+      padding: 7px 16px; border: 1px solid #dadce0; border-radius: 16px;
+      background: #fff; cursor: pointer; font: inherit; color: #5f6368;
+    }
+    #clear-btn:hover { background: #f1f3f4; color: #d93025; }
+    #q {
+      width: 100%; padding: 9px 14px; border: 1px solid #dadce0; border-radius: 20px;
+      font: inherit; outline: 0; background: #fff; margin-bottom: 18px;
+    }
+    #q:focus { border-color: #1a73e8; }
+    .card { background: #fff; border: 1px solid #e8eaed; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; }
+    .card h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; color: #3c4043; }
+    .closed-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; margin: 2px 4px 2px 0; border-radius: 14px;
+      background: #f1f3f4; cursor: pointer; font-size: 12.5px; max-width: 260px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .closed-chip:hover { background: #e8f0fe; color: #1a73e8; }
+    .day { font-size: 13px; font-weight: 600; color: #5f6368; margin: 18px 0 6px; }
+    .row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: 8px; cursor: pointer;
+    }
+    .row:hover { background: #f1f3f4; }
+    .row .fav { width: 16px; height: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #5f6368; }
+    .row .fav img { width: 16px; height: 16px; }
+    .row .tt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .tt .u { color: #5f6368; font-size: 12px; margin-left: 8px; }
+    .row .time { color: #5f6368; font-size: 12px; flex: none; }
+    .row .del {
+      flex: none; width: 24px; height: 24px; border: 0; border-radius: 50%;
+      background: none; color: #5f6368; cursor: pointer; font-size: 14px;
+      visibility: hidden; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .row:hover .del { visibility: visible; }
+    .row .del:hover { background: #dadce0; color: #d93025; }
+    .empty { color: #5f6368; text-align: center; padding: 30px 0; }
+    #more {
+      display: block; margin: 14px auto; padding: 8px 22px;
+      border: 1px solid #dadce0; border-radius: 18px; background: #fff; cursor: pointer; font: inherit; color: #1a73e8;
+    }
+    #more:hover { background: #f1f3f4; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>历史记录<span class="sp"></span><button id="clear-btn">清除浏览数据…</button></h1>
+    <input id="q" type="text" placeholder="搜索历史记录" spellcheck="false">
+    <div class="card hidden" id="closed-card">
+      <h2>最近关闭的标签页</h2>
+      <div id="closed-list"></div>
+    </div>
+    <div id="list"></div>
+    <button id="more" class="hidden">加载更多</button>
+  </main>
+  <script>
+    (function () {
+      var P = window.polaris;
+      var OFFSET = 0, LIMIT = 100, LASTQ = '', EOF = false, TIMER = null;
+      function $(id) { return document.getElementById(id); }
+      function esc(s) { var d = document.createElement('span'); d.textContent = s || ''; return d.innerHTML; }
+      function dayLabel(at) {
+        var d = new Date(at), t = new Date(); t.setHours(0, 0, 0, 0);
+        var day = new Date(d); day.setHours(0, 0, 0, 0);
+        var diff = (t - day) / 86400000;
+        if (diff === 0) return '今天';
+        if (diff === 1) return '昨天';
+        return d.toLocaleDateString('zh-CN');
+      }
+      function favHtml(v) {
+        return v ? '<img src="' + esc(v) + '" onerror="this.outerHTML=\'' + (v ? '' : '') + '\'">'
+          : '<span></span>';
+      }
+      function renderList(items, append) {
+        var box = $('list');
+        if (!append) box.innerHTML = '';
+        var lastDay = append ? box.lastElementChild && box.lastElementChild.previousElementSibling ? '' : '' : null;
+        var curDay = append ? (box.dataset.lastDay || '') : '';
+        for (var i = 0; i < items.length; i++) {
+          var v = items[i];
+          var day = dayLabel(v.at);
+          if (day !== curDay) {
+            curDay = day;
+            var h = document.createElement('div');
+            h.className = 'day'; h.textContent = day;
+            box.appendChild(h);
+          }
+          var row = document.createElement('div');
+          row.className = 'row';
+          row.innerHTML =
+            '<span class="fav">' + (v.favicon ? '<img src="' + esc(v.favicon) + '" onerror="this.remove()">' : esc((v.title || '?').charAt(0))) + '</span>' +
+            '<span class="tt">' + esc(v.title) + '<span class="u">' + esc(v.url) + '</span></span>' +
+            '<span class="time">' + new Date(v.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+            '<button class="del" title="删除此条">×</button>';
+          (function (vv) {
+            row.onclick = function () { P.tabs.create(vv.url); };
+            row.querySelector('.del').onclick = function (e) {
+              e.stopPropagation();
+              P.history.remove(vv.id).then(load0).catch(function () {});
+            };
+          })(v);
+          box.appendChild(row);
+        }
+        box.dataset.lastDay = curDay;
+        if (!box.children.length) box.innerHTML = '<div class="empty">暂无历史记录</div>';
+      }
+      function load(append) {
+        P.history.list(LASTQ).then(function (items) {
+          // 主进程一次返回全部（本地库），这里做前端分页
+          var slice = items.slice(OFFSET, OFFSET + LIMIT);
+          EOF = OFFSET + LIMIT >= items.length;
+          $('more').classList.toggle('hidden', EOF);
+          renderList(slice, append);
+        }).catch(function () {});
+      }
+      function load0() { OFFSET = 0; EOF = false; load(false); }
+      function loadClosed() {
+        P.history.closed().then(function (list) {
+          var box = $('closed-list');
+          box.innerHTML = '';
+          $('closed-card').classList.toggle('hidden', !list.length);
+          for (var i = 0; i < list.length; i++) {
+            (function (c) {
+              var el = document.createElement('span');
+              el.className = 'closed-chip';
+              el.textContent = (c.title || c.url).slice(0, 40);
+              el.title = c.url;
+              el.onclick = function () { P.tabs.create(c.url); };
+              box.appendChild(el);
+            })(list[i]);
+          }
+        }).catch(function () {});
+      }
+      $('q').addEventListener('input', function () {
+        clearTimeout(TIMER);
+        TIMER = setTimeout(function () { LASTQ = $('q').value.trim(); load0(); }, 200);
+      });
+      $('more').onclick = function () { OFFSET += LIMIT; load(true); };
+      $('clear-btn').onclick = function () { P.tabs.create('browser://settings/#clear'); };
+      if (location.hash === '#closed') $('closed-card').classList.remove('hidden');
+      loadClosed();
+      load0();
+    })();
+  </script>
+</body>
+</html>
