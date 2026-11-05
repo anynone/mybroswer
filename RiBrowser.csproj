@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>RiBrowser</RootNamespace>
+    <AssemblyName>RiBrowser</AssemblyName>
+    <AssemblyTitle>Ri 浏览器</AssemblyTitle>
+    <Product>Ri 浏览器</Product>
+    <Description>基于 CEF (Chromium) 内核的多标签浏览器</Description>
+    <Version>0.1.0</Version>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CefSharp.WinForms.NETCore" Version="156.0.150" />
+    <PackageReference Include="DotNetBrowser" Version="4.3.5" />
+    <PackageReference Include="DotNetBrowser.WinForms" Version="4.3.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Privacy\Scripts\tz-shim.js" />
+    <EmbeddedResource Include="Privacy\Scripts\fp-shim.js" />
+  </ItemGroup>
+
+</Project>

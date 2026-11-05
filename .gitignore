@@ -1,0 +1,16 @@
+# 构建产物
+bin/
+obj/
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# 运行时数据（不提交用户本地配置）
+*.log
+shot-*.png
+ri-*.js
