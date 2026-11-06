@@ -232,13 +232,40 @@
     }
   } catch (e) { /* ignore */ }
 
-  // ---- 0d) navigator.deviceMemory 钳制：真 Chrome 按规范上报上限 8GB
+  // ---- 0d) navigator.deviceMemory 钳制（真 Chrome 按规范上限 8；本机 32GB 会直接报 32 露馅）
+  // Worker 上下文不经过本垫片，必须包装 Worker 构造器把同款钳制注入经典 Worker 内部，
+  // 否则"页面 8 / Worker 32"的不一致本身就是可检测指纹
   try {
     var dm = navigator.deviceMemory;
     if (typeof dm === 'number' && dm > 8) {
       var dmGet = function deviceMemory() { return 8; };
       fake(dmGet, 'get deviceMemory');
-      swap(NAVP, 'deviceMemory', { get: dmGet, configurable: true });
+      swap(NAVP, 'deviceMemory', { get: dmGet, configurable: true, enumerable: true });
+
+      var clampInWorker = "(function(){try{var P=(typeof WorkerNavigator!=='undefined'?WorkerNavigator:Navigator).prototype;" +
+        "Object.defineProperty(P,'deviceMemory',{get:function deviceMemory(){return 8},configurable:true,enumerable:true});}catch(e){}})();";
+      if (typeof Worker === 'function' && !window.__riWkWrap) {
+        window.__riWkWrap = 1;
+        var OW = Worker;
+        var Wk = function Worker(u, o) {
+          if (!(this instanceof Wk)) throw new TypeError("Failed to construct 'Worker': Please use the 'new' operator");
+          if (u && typeof u === 'string' && (!o || o.type !== 'module')) {
+            try {
+              var abs = new URL(u, location.href).href;
+              var shim = new Blob([clampInWorker + "importScripts(" + JSON.stringify(abs) + ");"],
+                { type: 'application/javascript' });
+              return new OW(URL.createObjectURL(shim), o);
+            } catch (e) { /* 回退原生构造 */ }
+          }
+          return new OW(u, o);
+        };
+        try {
+          Wk.prototype = OW.prototype; // instanceof 双向兼容
+          Object.setPrototypeOf(Wk, OW);
+          fake(Wk, 'Worker');
+          Object.defineProperty(window, 'Worker', { value: Wk, writable: true, configurable: true });
+        } catch (e) { /* ignore */ }
+      }
     }
   } catch (e) { /* ignore */ }
 

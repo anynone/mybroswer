@@ -349,6 +349,7 @@ internal sealed class MainForm : Form
             "(function(){var r={};r.fpTag=typeof window.__riFp__;r.tzTag=typeof window.__riTz__;" +
             "r.us=typeof window.__riUserScriptTest!=='undefined'?window.__riUserScriptTest:'none';" +
             "r.lang=navigator.language;r.langs=(navigator.languages||[]).join(',');" +
+            "r.dm=navigator.deviceMemory;" +
             "r.uadPlat=(navigator.userAgentData&&navigator.userAgentData.platform)||null;" +
             "r.tz=Intl.DateTimeFormat().resolvedOptions().timeZone;" +
             "r.dateStr=new Date(2026,0,15,12,0,0).toString();r.offset=new Date(2026,0).getTimezoneOffset();" +
@@ -360,10 +361,40 @@ internal sealed class MainForm : Form
             "r.simsunEq=Math.abs(w('SimSun')-base)<0.01;" +
             "r.segoeDiff=Math.abs(w('Segoe UI')-base)>0.01;return JSON.stringify(r);})()";
 
+        // Worker 一致性探针：Worker 上下文不经过脚本垫片，读到的必须是浏览器原生值，
+        // 页面（CDP/垫片）与 Worker（CefSettings.AcceptLanguageList）三端需一致
+        const string workerStart =
+            "(function(){window.__riWk='pending';try{" +
+            "var src='postMessage({langs:(navigator.languages||[]).join(\\\",\\\"),dm:navigator.deviceMemory," +
+            "offset:new Date(2026,0).getTimezoneOffset(),ua:navigator.userAgent});';" +
+            "var w=new Worker(URL.createObjectURL(new Blob([src],{type:'application/javascript'})));" +
+            "w.onmessage=function(e){window.__riWk=JSON.stringify(e.data);};" +
+            "w.onerror=function(){window.__riWk='error'};}catch(e){window.__riWk='ex:'+e.message;}" +
+            "return 'started';})()";
+
         try
         {
             var resp = await tab.Browser.EvaluateScriptAsync(probe);
             Console.WriteLine("SELFTEST " + (resp.Success ? resp.Result?.ToString() : "EVAL_FAIL:" + resp.Message));
+
+            await tab.Browser.EvaluateScriptAsync(workerStart);
+            await Task.Delay(2500);
+            var wk = await tab.Browser.EvaluateScriptAsync("window.__riWk");
+            Console.WriteLine("SELFTEST WORKER " + (wk.Success ? wk.Result?.ToString() : "EVAL_FAIL:" + wk.Message));
+
+            // 对比页面与 Worker 的关键值
+            try
+            {
+                var page = System.Text.Json.JsonDocument.Parse(resp.Result!.ToString()!).RootElement;
+                var work = System.Text.Json.JsonDocument.Parse(wk.Result!.ToString()!).RootElement;
+                var pageLangs = page.GetProperty("langs").ToString();
+                var workLangs = work.GetProperty("langs").GetString();
+                var pageDm = page.GetProperty("dm").GetDouble();
+                var workDm = work.GetProperty("dm").GetDouble();
+                Console.WriteLine($"SELFTEST WORKER-CHECK langs一致={pageLangs == workLangs} (page={pageLangs} worker={workLangs}) " +
+                    $"deviceMemory一致={Math.Abs(pageDm - workDm) < 0.01} (page={pageDm} worker={workDm})");
+            }
+            catch (Exception ex) { Console.WriteLine("SELFTEST WORKER-COMPARE FAIL " + ex.Message); }
         }
         catch (Exception ex)
         {

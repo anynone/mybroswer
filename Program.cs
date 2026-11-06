@@ -22,8 +22,13 @@ internal static class Program
             CachePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "RiBrowser", "Cache"),
-            Locale = "zh-CN",
-            AcceptLanguageList = "zh-CN,zh;q=0.9,en;q=0.8",
+            // 语言三端对齐（页面 CDP 覆盖 / Worker 原生读取 / HTTP 头）都源自 BrowserLanguage：
+            // Worker 的 navigator.languages 不走脚本垫片，只认这里的 AcceptLanguageList。
+            // 注意 CEF 不剥离 q 值，列表必须用纯标签（"en-US,en"），否则 Worker 读到 "en;q=0.9"
+            Locale = string.IsNullOrEmpty(privacy.BrowserLanguage) ? "zh-CN" : privacy.BrowserLanguage,
+            AcceptLanguageList = string.IsNullOrEmpty(privacy.BrowserLanguage)
+                ? "zh-CN,zh,en"
+                : privacy.BrowserLanguage + "," + privacy.BrowserLanguage.Split('-')[0],
             // 自定义 UA 模式在网络层直接生效；默认模式留空（与内核 Chromium 版本一致）
             UserAgent = privacy.UserAgentMode == "custom" && !string.IsNullOrWhiteSpace(privacy.CustomUserAgent)
                 ? privacy.CustomUserAgent.Trim()
