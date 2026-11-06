@@ -359,7 +359,15 @@ internal sealed class MainForm : Form
             "r.yaheiEq=Math.abs(w('Microsoft YaHei')-base)<0.01;" +
             "r.pingfangEq=Math.abs(w('PingFang SC')-base)<0.01;" +
             "r.simsunEq=Math.abs(w('SimSun')-base)<0.01;" +
-            "r.segoeDiff=Math.abs(w('Segoe UI')-base)>0.01;return JSON.stringify(r);})()";
+            "r.segoeDiff=Math.abs(w('Segoe UI')-base)>0.01;" +
+            // Canvas 指纹稳定性：噪声由内容决定（同内容任意画布/重画后读取必须一致）
+            "function fpDraw(cv){var x=cv.getContext('2d');x.clearRect(0,0,100,40);x.textBaseline='top';" +
+            "x.font='14px Arial';x.fillStyle='#f60';x.fillRect(0,0,60,20);x.fillStyle='#069';" +
+            "x.fillText('RiBrowser 指纹稳定性',2,2);return cv.toDataURL();}" +
+            "var A=document.createElement('canvas');A.width=100;A.height=40;" +
+            "var B=document.createElement('canvas');B.width=100;B.height=40;" +
+            "r.cvSame=fpDraw(A)===fpDraw(A);" +   // 同画布重画两次
+            "r.cvCross=fpDraw(A)===fpDraw(B);return JSON.stringify(r);})()"; // 两个画布同内容
 
         // Worker 一致性探针：Worker 上下文不经过脚本垫片，读到的必须是浏览器原生值，
         // 页面（CDP/垫片）与 Worker（CefSettings.AcceptLanguageList）三端需一致

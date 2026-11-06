@@ -622,66 +622,107 @@
     var realTUD = CANP.toDataURL;
     var realTB = CANP.toBlob;
     var ctx2d = new WeakMap();   // canvas -> 2d context
-    var noised = new WeakSet();  // 已扰动过的 canvas（每画布一次性，保证同画布指纹稳定）
-    var cvIdx = new WeakMap();
-    var cvSeq = 1;
     function rnd(seed) {
       var s = seed >>> 0 || 1;
       return function () { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s; };
     }
-    function noiseOnce(cv) {
-      if (!C.canvas || !cv || noised.has(cv)) return;
-      var ctx = ctx2d.get(cv);
-      if (!ctx) return;
-      var w = cv.width, h = cv.height;
-      if (!w || !h) return;
-      noised.add(cv);
-      var idx = cvIdx.get(cv);
-      if (idx === undefined) { idx = cvSeq++; cvIdx.set(cv, idx); }
-      try {
-        var d = realGID.call(ctx, 0, 0, w, h);
-        var a = d.data;
-        var px = w * h;
-        var r = rnd((C.seed ^ Math.imul(idx, 2654435761)) >>> 0);
-        // 只翻转不透明像素的 R 通道最低位：canvas 内部按预乘 alpha 存储，
-        // 透明像素的 RGB 在往返转换中会被清零，视觉上 LSB 亦不可见
-        var flipped = 0;
-        for (var p = 0; p < px; p++) {
-          var o = p * 4;
-          if (a[o + 3] === 0) continue;
-          if ((r() & 7) === 0) { a[o] ^= 1; flipped++; }
+    // 内容哈希（FNV-1a，>64KB 采样）：噪声种子由内容决定而非画布实例决定——
+    // 同样内容无论画在哪个画布、重画几次，加的噪声完全一致（Brave farbling 同思路），
+    // 否则"两个画布画同一画面结果不同"会被识别为随机噪声注入
+    function hashArr(a) {
+      var n = a.length;
+      var step = n > 65536 ? (n >> 14) + 1 : 1;
+      var h = Math.imul(0x811c9dc5 ^ n, 0x01000193) >>> 0;
+      for (var i = 0; i < n; i += step) h = Math.imul(h ^ a[i], 0x01000193) >>> 0;
+      return h >>> 0;
+    }
+    // 关键原则：绝不写回、也绝不读回原画布。
+    // putImageData 会让 Skia 丢弃 LCD 次像素抗锯齿；多次 getImageData 读回也会
+    // 触发画布从 GPU 降级到软件渲染——两者都会让"之后重画的文字光栅"发生变化，
+    // 表现为"同画面两次读取结果不同"。因此：drawImage 纯 GPU 纹理拷贝到临时画布，
+    // 所有读回/加噪/编码全部发生在临时画布上，原画布的渲染路径永远不被扰动。
+    // 噪声种子 = 配置种子 ^ 内容哈希：同内容无论哪个画布、画几次，输出都一致。
+    function noisedClone(cv) {
+      var cl = document.createElement('canvas');
+      cl.width = cv.width; cl.height = cv.height;
+      var cx = cl.getContext('2d');
+      cx.drawImage(cv, 0, 0);
+      var d = realGID.call(cx, 0, 0, cl.width, cl.height);
+      var a = d.data, px = cl.width * cl.height;
+      var seed = (C.seed ^ hashArr(a)) >>> 0;
+      var r = rnd(seed);
+      // 只翻转非透明像素的 R 通道最低位（视觉不可见）
+      var flipped = 0;
+      for (var p = 0; p < px; p++) {
+        var o = p * 4;
+        if (a[o + 3] === 0) continue;
+        if ((r() & 7) === 0) { a[o] ^= 1; flipped++; }
+      }
+      if (!flipped) {
+        // 保底：整个画布都没有命中时，按种子选定一个非透明像素
+        var r2 = rnd((C.seed ^ Math.imul(seed, 0x9e3779b1)) >>> 0);
+        var k = 1 + (r2() % 107);
+        var seen = 0;
+        for (var p2 = 0; p2 < px; p2++) {
+          var o2 = p2 * 4;
+          if (a[o2 + 3] === 0) continue;
+          seen++;
+          if (seen % k === 0) { a[o2] ^= 1; break; }
         }
-        if (!flipped) {
-          // 保底：整个画布都没有命中时，按种子选定一个非透明像素
-          var r2 = rnd((C.seed ^ Math.imul(idx, 0x9e3779b1)) >>> 0);
-          var k = 1 + (r2() % 107);
-          var seen = 0;
-          for (var p2 = 0; p2 < px; p2++) {
-            var o2 = p2 * 4;
-            if (a[o2 + 3] === 0) continue;
-            seen++;
-            if (seen % k === 0) { a[o2] ^= 1; break; }
-          }
-        }
-        realPID.call(ctx, d, 0, 0);
-      } catch (e) { /* ignore */ }
+      }
+      cx.putImageData(d, 0, 0);
+      return cl;
     }
     var getContext = fake(function getContext(type) {
       var ctx = realGetCtx.apply(this, arguments);
       if (ctx && type === '2d') { try { ctx2d.set(this, ctx); } catch (e) { /* ignore */ } }
       return ctx;
     }, 'getContext');
+    // 垫片画布：getImageData 的参数校验与区域构造都在它上面做（1×1 永久复用），
+    // 保证对原画布的读回次数为零——原生 getImageData 读回同样会触发渲染降级
+    var regScratchCtx = null;
     var getImageData = fake(function getImageData(sx, sy, sw, sh) {
-      noiseOnce(this.canvas);
-      return realGID.call(this, sx, sy, sw, sh);
+      var cv = this && this.canvas;
+      if (!C.canvas || !cv || !ctx2d.has(cv)) return realGID.apply(this, arguments);
+      var reg;
+      try {
+        if (!regScratchCtx) {
+          var sc = document.createElement('canvas');
+          sc.width = 1; sc.height = 1;
+          regScratchCtx = sc.getContext('2d');
+        }
+        // 原生语义：越界部分透明填充、参数异常照常抛错——全部由垫片画布承担
+        reg = realGID.call(regScratchCtx, sx, sy, sw, sh);
+      } catch (e) { throw e; }
+      try {
+        var cl = noisedClone(cv);
+        var full = realGID.call(cl.getContext('2d'), 0, 0, cl.width, cl.height);
+        // 把加噪全图与请求区域的交集覆盖回去（区域外部分保持原生的透明填充）
+        var rw = reg.width, rh = reg.height;
+        var x0 = Math.max(0, sx | 0), y0 = Math.max(0, sy | 0);
+        var x1 = Math.min(cv.width, (sx | 0) + rw), y1 = Math.min(cv.height, (sy | 0) + rh);
+        for (var y = y0; y < y1; y++) {
+          var dstRow = (y - (sy | 0)) * rw, srcRow = y * cv.width;
+          for (var x = x0; x < x1; x++) {
+            var src = (srcRow + x) * 4, dst = (dstRow + x - (sx | 0)) * 4;
+            reg.data[dst] = full.data[src];
+            reg.data[dst + 1] = full.data[src + 1];
+            reg.data[dst + 2] = full.data[src + 2];
+            reg.data[dst + 3] = full.data[src + 3];
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return reg;
     }, 'getImageData');
     var toDataURL = fake(function toDataURL() {
-      noiseOnce(this);
-      return realTUD.apply(this, arguments);
+      if (!C.canvas || !ctx2d.has(this)) return realTUD.apply(this, arguments);
+      try { return realTUD.apply(noisedClone(this), arguments); }
+      catch (e) { return realTUD.apply(this, arguments); }
     }, 'toDataURL');
     var toBlob = fake(function toBlob() {
-      noiseOnce(this);
-      return realTB.apply(this, arguments);
+      if (!C.canvas || !ctx2d.has(this)) return realTB.apply(this, arguments);
+      try { return realTB.apply(noisedClone(this), arguments); }
+      catch (e) { return realTB.apply(this, arguments); }
     }, 'toBlob');
     var ok = swap(CANP, 'getContext', { value: getContext, writable: true, enumerable: false, configurable: true })
           && swap(CTX2D, 'getImageData', { value: getImageData, writable: true, enumerable: false, configurable: true })
