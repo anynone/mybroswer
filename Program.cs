@@ -33,6 +33,12 @@ internal static class Program
         // 隐私防护：关闭站点隔离（跨站 iframe 与主框架共享渲染进程，
         // 使进程级时区/语言覆盖直达全部 frame，参考 Android Chrome 默认行为）
         settings.CefCommandLineArgs.Add("disable-site-isolation-trials", "1");
+
+        // 远程调试端口（--debug-port=9222）：CDP 驱动，用于自动化验证
+        var dbg = Environment.GetCommandLineArgs()
+            .FirstOrDefault(a => a.StartsWith("--debug-port="));
+        if (int.TryParse(dbg?["--debug-port=".Length..], out var debugPort))
+            settings.CefCommandLineArgs.Add("remote-debugging-port", debugPort.ToString());
         // 浏览器语言伪装需重启后经 --lang 深入 Web Worker
         if (!string.IsNullOrEmpty(privacy.BrowserLanguage))
             settings.CefCommandLineArgs.Add("lang", privacy.BrowserLanguage);

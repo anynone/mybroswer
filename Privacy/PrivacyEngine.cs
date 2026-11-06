@@ -147,6 +147,8 @@ internal sealed class PrivacyEngine
 /// <summary>每个 frame 的 V8 上下文创建时注入垫片脚本与用户脚本（document_start 时机）。</summary>
 internal sealed class ShimRenderHandler : IRenderProcessMessageHandler
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _hideLogHosts = new();
+
     public void OnContextCreated(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame)
     {
         try { frame.ExecuteJavaScriptAsync(ShimSource.Build(PrivacySettings.Current)); }
@@ -155,8 +157,17 @@ internal sealed class ShimRenderHandler : IRenderProcessMessageHandler
         // 广告元素隐藏（cosmetic filtering）：按 frame 自身域名过滤选择器，随 DOM 动态插入同样生效
         try
         {
-            var hide = AdBlocker.BuildHideScript(PrivacyEngine.HostOf(frame.Url));
-            if (hide.Length > 0) frame.ExecuteJavaScriptAsync(hide);
+            var host = PrivacyEngine.HostOf(frame.Url);
+            var hide = AdBlocker.BuildHideScript(host);
+            if (hide.Length > 0)
+            {
+                frame.ExecuteJavaScriptAsync(hide);
+                if (host is not null && _hideLogHosts.TryAdd(host, true))
+                    Console.WriteLine($"[adblock] hide injected: host={host} bytes={hide.Length}");
+            }
+            // 站点专用补丁（YouTube 广告裁剪等，等价 uBlock scriptlet）
+            var patch = SitePatches.Build(host);
+            if (patch.Length > 0) frame.ExecuteJavaScriptAsync(patch);
         }
         catch { }
 

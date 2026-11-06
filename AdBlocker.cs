@@ -81,12 +81,18 @@ public static class AdBlocker
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RiBrowser");
     private static string RulesPath => Path.Combine(Dir, "easylist.txt");
 
-    // 每个列表按顺序尝试多个源，避免单点 404（easylist.to 的 China 路径曾失效）
+    // 规则四件套（uBlock 默认订阅等价 + turtlecute 补充）：EasyList + EasyPrivacy + EasyList China + Turtlecute Host List。
+    // 每个列表按顺序尝试多个源，避免单点 404（easylist.to 的 China 路径已失效，走 GitHub raw）。
     private static readonly string[][] Sources =
     {
         new[] { "https://easylist.to/easylist/easylist.txt", "https://raw.githubusercontent.com/easylist/easylist/master/easylist.txt" },
-        new[] { "https://easylist.to/easylistchina/easylistchina.txt", "https://raw.githubusercontent.com/easylist/easylistchina/master/easylistchina.txt" },
+        new[] { "https://easylist.to/easylist/easyprivacy.txt" },
+        new[] { "https://raw.githubusercontent.com/easylist/easylistchina/master/easylistchina.txt", "https://easylist.to/easylistchina/easylistchina.txt" },
+        new[] { "https://adblock.turtlecute.org/d3host.adblock" },
     };
+
+    /// <summary>缓存版本标记：列表组合变化时递增，旧缓存自动刷新。</summary>
+    private const string CacheMarker = "! Ri-lists: v4 (easylist + easyprivacy + easylistchina + d3host)";
 
     /// <summary>内置补充：常见第一方路径广告模式 + 经典广告类名选择器（基础 EasyList 未覆盖；
     /// ^ 结尾 = 分隔符或 URL 末尾，避免误伤 .json/.jsx）。</summary>
@@ -114,11 +120,11 @@ public static class AdBlocker
             var text = File.ReadAllText(RulesPath);
             LoadRules(text);
             Console.WriteLine($"[adblock] loaded: block={_block.Count} allow={_allow.Count} hide={_hide.Count} [{Stats()}]");
-            // 规则过期（列表自身 Expires 4 天）或缓存里缺 China 列表（旧版只下到了 EasyList）→ 后台刷新
+            // 缓存过期（列表 Expires 4 天）或版本标记不匹配（列表组合已变化）→ 后台刷新
             var stale = (DateTime.UtcNow - File.GetLastWriteTimeUtc(RulesPath)).TotalDays > 3;
-            if (stale || !text.Contains("EasyList China", StringComparison.OrdinalIgnoreCase))
+            if (stale || !text.StartsWith(CacheMarker, StringComparison.Ordinal))
             {
-                Console.WriteLine("[adblock] rules stale or missing China list, refreshing in background");
+                Console.WriteLine("[adblock] rules stale or outdated cache format, refreshing in background");
                 _ = EnsureRulesAsync();
             }
         }
@@ -157,7 +163,7 @@ public static class AdBlocker
                 {
                     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
                     var text = await http.GetStringAsync(url);
-                    if (text.Contains("Adblock", StringComparison.OrdinalIgnoreCase) && text.Length > 10000)
+                    if (text.Contains("adblock", StringComparison.OrdinalIgnoreCase) && text.Length > 2000)
                     {
                         sb.AppendLine(text);
                         Console.WriteLine($"[adblock] downloaded {url} ({text.Length} chars)");
@@ -176,7 +182,7 @@ public static class AdBlocker
             try
             {
                 Directory.CreateDirectory(Dir);
-                var rules = sb.ToString();
+                var rules = CacheMarker + "\n" + sb;
                 File.WriteAllText(RulesPath, rules);
                 LoadRules(rules);
                 Changed?.Invoke();
