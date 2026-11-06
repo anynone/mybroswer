@@ -25,7 +25,7 @@ internal sealed class AdBlockRequestHandler : IResourceRequestHandler
     public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame,
         IRequest request, IRequestCallback callback)
     {
-        if (AdBlocker.ShouldBlock(request.Url, frame?.Url))
+        if (AdBlocker.ShouldBlock(request.Url, frame?.Url, request.ResourceType))
         {
             return CefReturnValue.Cancel;
         }

@@ -131,6 +131,17 @@ internal sealed class PrivacyEngine
         }
         catch { return false; }
     }
+
+    internal static string? HostOf(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        try
+        {
+            var host = new Uri(url).Host;
+            return host.Length == 0 ? null : host.ToLowerInvariant();
+        }
+        catch { return null; }
+    }
 }
 
 /// <summary>每个 frame 的 V8 上下文创建时注入垫片脚本与用户脚本（document_start 时机）。</summary>
@@ -140,6 +151,15 @@ internal sealed class ShimRenderHandler : IRenderProcessMessageHandler
     {
         try { frame.ExecuteJavaScriptAsync(ShimSource.Build(PrivacySettings.Current)); }
         catch { /* frame 已失效等情况忽略 */ }
+
+        // 广告元素隐藏（cosmetic filtering）：按 frame 自身域名过滤选择器，随 DOM 动态插入同样生效
+        try
+        {
+            var hide = AdBlocker.BuildHideScript(PrivacyEngine.HostOf(frame.Url));
+            if (hide.Length > 0) frame.ExecuteJavaScriptAsync(hide);
+        }
+        catch { }
+
         // 用户脚本（扩展替代）只在主 frame 注入，由脚本内 run-at 决定执行时机
         try
         {
