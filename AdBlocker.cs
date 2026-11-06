@@ -81,7 +81,8 @@ public static class AdBlocker
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RiBrowser");
     private static string RulesPath => Path.Combine(Dir, "easylist.txt");
 
-    // 规则四件套（uBlock 默认订阅等价 + turtlecute 补充）：EasyList + EasyPrivacy + EasyList China + Turtlecute Host List。
+    // 规则五件套：EasyList + EasyPrivacy + EasyList China + Turtlecute d3host + HaGeZi Pro
+    // （uBlock 默认订阅等价 + DNS 级全域覆盖，堵住移动广告联盟/归因追踪类域名）。
     // 每个列表按顺序尝试多个源，避免单点 404（easylist.to 的 China 路径已失效，走 GitHub raw）。
     private static readonly string[][] Sources =
     {
@@ -89,13 +90,16 @@ public static class AdBlocker
         new[] { "https://easylist.to/easylist/easyprivacy.txt" },
         new[] { "https://raw.githubusercontent.com/easylist/easylistchina/master/easylistchina.txt", "https://easylist.to/easylistchina/easylistchina.txt" },
         new[] { "https://adblock.turtlecute.org/d3host.adblock" },
+        new[] { "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt" },
     };
 
     /// <summary>缓存版本标记：列表组合变化时递增，旧缓存自动刷新。</summary>
-    private const string CacheMarker = "! Ri-lists: v4 (easylist + easyprivacy + easylistchina + d3host)";
+    private const string CacheMarker = "! Ri-lists: v5 (easylist + easyprivacy + easylistchina + d3host + hagezi-pro)";
 
-    /// <summary>内置补充：常见第一方路径广告模式 + 经典广告类名选择器（基础 EasyList 未覆盖；
-    /// ^ 结尾 = 分隔符或 URL 末尾，避免误伤 .json/.jsx）。</summary>
+    /// <summary>内置补充：常见第一方路径广告模式 + 经典广告类名选择器 + 追踪域名精选。
+    /// 平台 API 基础设施（graph.facebook / tagmanager / googlevideo 等）只按
+    /// $image,ping,xmlhttprequest 限拦——favicon/追踪像素探测会被拦截，
+    /// 登录组件与站点功能脚本不受影响。</summary>
     private const string BuiltinRules = """
         ! Ri 内置补充规则
         /pagead.js^$script
@@ -108,6 +112,55 @@ public static class AdBlocker
         ##.textads
         ##.ad-slot
         ##.ad-banner
+        ! —— 归因 / 移动广告追踪（纯追踪域，整域拦）
+        ||appsflyer.com^
+        ||adjust.com^
+        ||kochava.com^
+        ||impact.com^
+        ||inmobi.com^
+        ||quantcast.com^
+        ||quantserve.com^
+        ||dynamicyield.com^
+        ||skimresources.com^
+        ||viglink.com^
+        ||mineralt.io^
+        ||juicyads.com^
+        ||list-manage.com^
+        ||bnc.lt^
+        ||tvinteractive.tv^
+        ! —— 同意管理 / CMP（等同 AdGuard Cookie Notices 行为）
+        ||cookielaw.org^
+        ||cookiebot.com^
+        ||privacy-mgmt.com^
+        ||privacy-center.org^
+        ||trustarc.com^
+        ||onetrust.com^
+        ||usercentrics.eu^
+        ! —— 平台 API 基础设施（限拦图片/信标/XHR 探测，不破坏功能脚本）
+        ||tagmanager.google.com^$image,ping,xmlhttprequest
+        ||redirector.googlevideo.com^$image,ping,xmlhttprequest
+        ||dai.google.com^$image,ping,xmlhttprequest
+        ||graph.facebook.com^$image,ping,xmlhttprequest
+        ||connect.facebook.net^$image,ping,xmlhttprequest
+        ||i.instagram.com^$image,ping,xmlhttprequest
+        ||graph.instagram.com^$image,ping,xmlhttprequest
+        ||snap.licdn.com^$image,ping,xmlhttprequest
+        ||xp.apple.com^$image,ping,xmlhttprequest
+        ||s.youtube.com^$image,ping,xmlhttprequest
+        ||youtubei.googleapis.com^$image,ping,xmlhttprequest
+        ||cdn.optimizely.com^$image,ping,xmlhttprequest
+        ||widget.intercom.io^$image,ping,xmlhttprequest
+        ||analytics.twitter.com^$image,ping,xmlhttprequest
+        ||ssl.p.jwpcdn.com^$image,ping,xmlhttprequest
+        ||greatis.com^$image,ping,xmlhttprequest
+        ||2giga.link^$image,ping,xmlhttprequest
+        ||vk.com^$image,ping
+        ! —— 厂商遥测
+        ||vortex-win.data.microsoft.com^
+        ||settings-win.data.microsoft.com^
+        ||watson.telemetry.microsoft.com^
+        ||ngfts.lge.com^
+        ||us.ibs.lgappstv.com^
         """;
 
     public static void Initialize()
