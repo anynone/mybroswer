@@ -32,6 +32,7 @@ internal sealed class ScriptsForm : Form
         _list.HorizontalScrollbar = true;
         ReloadList();
         UserScripts.Changed += ReloadList;
+        FormClosed += (s, e) => UserScripts.Changed -= ReloadList; // 静态事件随窗体反订阅，防累积
 
         _import.SetBounds(14, 288, 110, 30);
         _import.Click += (s, e) =>
@@ -66,11 +67,15 @@ internal sealed class ScriptsForm : Form
     private void ReloadList()
     {
         if (IsDisposed) return;
-        _list.BeginInvoke(() =>
+        void Fill()
         {
             _list.Items.Clear();
             foreach (var s in UserScripts.Items) _list.Items.Add(s);
-        });
+        }
+        // 句柄未创建（构造期）或本就在 UI 线程时直接填充，
+        // 否则 BeginInvoke 会抛 InvalidOperationException
+        if (!IsHandleCreated || !InvokeRequired) Fill();
+        else BeginInvoke(Fill);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
