@@ -1,5 +1,6 @@
 using CefSharp;
 using CefSharp.Handler;
+using System.Windows.Forms;
 
 namespace RiBrowser;
 
@@ -19,11 +20,29 @@ internal sealed class GlobalRequestHandler : RequestHandler
     }
 }
 
-/// <summary>页面右键菜单：追加「开发者工具」，打开 DevTools 并定位到点击处的元素。</summary>
+/// <summary>页面右键菜单：与 Chrome 一致。
+/// 链接/图片上下文完全重建菜单（在新标签页/新窗口中打开等），其余上下文保留
+/// CEF 默认菜单并追加「开发者工具」（打开后定位到右键位置的元素）。</summary>
 internal sealed class ContextMenuHandler : IContextMenuHandler
 {
     private static readonly CefMenuCommand DevTools =
         (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 1);
+    private static readonly CefMenuCommand OpenLinkTab =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 10);
+    private static readonly CefMenuCommand OpenLinkWin =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 11);
+    private static readonly CefMenuCommand SaveLink =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 12);
+    private static readonly CefMenuCommand CopyLink =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 13);
+    private static readonly CefMenuCommand OpenImageTab =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 14);
+    private static readonly CefMenuCommand OpenImageWin =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 15);
+    private static readonly CefMenuCommand SaveImage =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 16);
+    private static readonly CefMenuCommand CopyImage =
+        (CefMenuCommand)((int)CefMenuCommand.CustomFirst + 17);
 
     private readonly MainForm _form;
     public ContextMenuHandler(MainForm form) => _form = form;
@@ -31,6 +50,34 @@ internal sealed class ContextMenuHandler : IContextMenuHandler
     public void OnBeforeContextMenu(IWebBrowser chromiumWebBrowser, IBrowser browser,
         IFrame frame, IContextMenuParams parameters, IMenuModel model)
     {
+        var isLink = !string.IsNullOrEmpty(parameters.LinkUrl);
+        var isImage = parameters.MediaType == ContextMenuMediaType.Image;
+        if (isLink || isImage)
+        {
+            // Chrome 同款：链接/图片上下文不出现 后退/前进/刷新 等页面项
+            model.Clear();
+            if (isLink)
+            {
+                model.AddItem(OpenLinkTab, "在新标签页中打开链接");
+                model.AddItem(OpenLinkWin, "在新窗口中打开链接");
+                model.AddSeparator();
+                model.AddItem(SaveLink, "将链接另存为...");
+                model.AddItem(CopyLink, "复制链接地址");
+            }
+            if (isImage)
+            {
+                if (isLink) model.AddSeparator();
+                model.AddItem(OpenImageTab, "在新标签页中打开图片");
+                model.AddItem(OpenImageWin, "在新窗口中打开图片");
+                model.AddSeparator();
+                model.AddItem(SaveImage, "将图片另存为...");
+                model.AddItem(CopyImage, "复制图片地址");
+            }
+            model.AddSeparator();
+            model.AddItem(DevTools, "开发者工具  F12");
+            return;
+        }
+
         if (model.Count > 0) model.AddSeparator();
         model.AddItem(DevTools, "开发者工具  F12");
     }
@@ -38,10 +85,53 @@ internal sealed class ContextMenuHandler : IContextMenuHandler
     public bool OnContextMenuCommand(IWebBrowser chromiumWebBrowser, IBrowser browser,
         IFrame frame, IContextMenuParams parameters, CefMenuCommand command, CefEventFlags eventFlags)
     {
+        var link = parameters.LinkUrl;
+        var image = parameters.SourceUrl;
         if (command == DevTools)
         {
             // 带点击坐标打开：DevTools 会直接选中右键位置的元素（与 Chrome「检查」一致）
             _form.UiShowDevTools(chromiumWebBrowser, parameters.XCoord, parameters.YCoord);
+            return true;
+        }
+        if (command == OpenLinkTab)
+        {
+            // Chrome 惯例：右键菜单打开的新标签页在后台（不切换当前页）
+            _form.UiAddTab(link, select: false);
+            return true;
+        }
+        if (command == OpenLinkWin)
+        {
+            _form.Ui(() => Program.OpenWindow(link));
+            return true;
+        }
+        if (command == SaveLink)
+        {
+            chromiumWebBrowser.GetBrowser().GetHost().StartDownload(link);
+            return true;
+        }
+        if (command == CopyLink)
+        {
+            _form.Ui(() => Clipboard.SetText(link));
+            return true;
+        }
+        if (command == OpenImageTab)
+        {
+            _form.UiAddTab(image, select: false);
+            return true;
+        }
+        if (command == OpenImageWin)
+        {
+            _form.Ui(() => Program.OpenWindow(image));
+            return true;
+        }
+        if (command == SaveImage)
+        {
+            chromiumWebBrowser.GetBrowser().GetHost().StartDownload(image);
+            return true;
+        }
+        if (command == CopyImage)
+        {
+            _form.Ui(() => Clipboard.SetText(image));
             return true;
         }
         return false;

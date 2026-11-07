@@ -72,7 +72,7 @@ internal sealed class MainForm : Form
     private readonly List<BrowserTab> _tabs = new();
     private BrowserTab? _activeTab;
 
-    public MainForm()
+    public MainForm(string? initialUrl = null)
     {
         Text = "Ri 浏览器";
         ClientSize = new Size(1200, 800);
@@ -202,7 +202,8 @@ internal sealed class MainForm : Form
         KeyDown += OnFormKeyDown;
         Resize += (s, e) => UpdateMaximizeGlyph();
 
-        AddTab(HomeUrl());
+        // 新窗口（右键"在新窗口中打开链接"）首标签直接加载目标页
+        AddTab(initialUrl ?? HomeUrl());
 
         if (Environment.GetCommandLineArgs().Contains("--selftest"))
             RunSelfTest();
@@ -438,7 +439,7 @@ internal sealed class MainForm : Form
 
     // ==================== 标签管理 ====================
 
-    internal BrowserTab AddTab(string? url = null)
+    internal BrowserTab AddTab(string? url = null, bool select = true)
     {
         url ??= HomeUrl();
 
@@ -489,7 +490,8 @@ internal sealed class MainForm : Form
         _content.Controls.Add(browser);
 
         UpdateTabWidths();
-        SelectTab(tab);
+        if (select) SelectTab(tab);
+        else browser.Visible = false; // 后台标签（右键"在新标签页中打开"）：不切换当前页
         return tab;
     }
 
@@ -591,7 +593,7 @@ internal sealed class MainForm : Form
 
     // ==================== 供 CEF 处理器跨线程调用 ====================
 
-    internal void UiAddTab(string? url) => Ui(() => AddTab(url));
+    internal void UiAddTab(string? url, bool select = true) => Ui(() => AddTab(url, select));
     internal void UiCloseActiveTab() => Ui(() => { if (_activeTab != null) CloseTab(_activeTab); });
     internal void UiOpenPrivacySettings() => Ui(ShowPrivacySettings);
     internal void UiToggleBookmark() => Ui(ToggleBookmarkForCurrent);

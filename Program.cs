@@ -69,10 +69,35 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        using var main = new MainForm();
-        Application.Run(main);
+        var main = new MainForm();
+        Track(main);
+        main.Show(); // 无参 Application.Run 不自动显示窗体，需显式 Show
+        Application.Run();
 
         Cef.Shutdown();
+    }
+
+    // ==================== 多窗口生命周期 ====================
+    // 主窗口关闭不再退出进程：只要还有浏览器窗口就继续跑，
+    // 最后一个窗口关闭时结束消息循环（与 Chrome 多窗口一致）。
+    private static readonly List<System.Windows.Forms.Form> _windows = new();
+
+    private static void Track(System.Windows.Forms.Form form)
+    {
+        _windows.Add(form);
+        form.FormClosed += (s, e) =>
+        {
+            _windows.Remove(form);
+            if (_windows.Count == 0) Application.ExitThread();
+        };
+    }
+
+    /// <summary>打开新的浏览器窗口（右键「在新窗口中打开链接」等）。</summary>
+    internal static void OpenWindow(string? url = null)
+    {
+        var form = new MainForm(url) { StartPosition = FormStartPosition.CenterParent };
+        Track(form);
+        form.Show();
     }
 
     /// <summary>广告拦截引擎自测：覆盖 turtlecute 等测试站的核心用例与常见误杀反例。</summary>
