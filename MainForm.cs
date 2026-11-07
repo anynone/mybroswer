@@ -451,6 +451,10 @@ internal sealed class MainForm : Form
             MenuHandler = new ContextMenuHandler(this),
             RequestHandler = new GlobalRequestHandler(),
         };
+        // 反机器人检测：CefSharp 默认向每个页面注入 window.CefSharp / window.cefSharp
+        // 全局对象（BindObjectAsync 等），browserscan 等 bot 检测以此判定"机器人"。
+        // v156 该开关在 JS 对象仓库上（不在 CefSettings）：关闭后对象不再注入
+        browser.JavascriptObjectRepository.Settings.JavascriptBindingApiEnabled = false;
 
         var item = new TabItem();
         var tab = new BrowserTab { Browser = browser, TabItem = item };

@@ -232,6 +232,14 @@
     }
   } catch (e) { /* ignore */ }
 
+  // ---- 0c2) 清除 CefSharp 全局对象痕迹：
+  // 检测站用 'CefSharp' in window 判定机器人——只能 delete（不能用访问器陷阱，
+  // 访问器会让 in 恒为 true 反而被检出）。正常路径下 AddTab 已通过
+  // JavascriptObjectRepository.Settings.JavascriptBindingApiEnabled=false 关闭注入，
+  // 此处仅兜底删除极端时序下已存在的实例
+  try { if ('CefSharp' in window) delete window.CefSharp; } catch (e) { /* ignore */ }
+  try { if ('cefSharp' in window) delete window.cefSharp; } catch (e) { /* ignore */ }
+
   // ---- 0d) navigator.deviceMemory 钳制（真 Chrome 按规范上限 8；本机 32GB 会直接报 32 露馅）
   // Worker 上下文不经过本垫片，必须包装 Worker 构造器把同款钳制注入经典 Worker 内部，
   // 否则"页面 8 / Worker 32"的不一致本身就是可检测指纹

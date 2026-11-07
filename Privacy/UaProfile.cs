@@ -33,12 +33,13 @@ internal static class UaProfile
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/"
         + ChromeFullVersion() + " Safari/537.36";
 
-    /// <summary>指定 BCP-47 语言的 Accept-Language（主语言 + 语系回退，与 Chrome 派生规则一致）。</summary>
+    /// <summary>指定 BCP-47 语言的 Accept-Language（主语言 + 语系回退，与 Chrome 派生规则一致）。
+    /// 不能带 q 值：CDP 覆盖与 CEF AcceptLanguageList 会各自追加权重，产生 ";q=0.9;q=0.9" 畸形头。</summary>
     public static string AcceptLanguagesFor(string locale)
     {
         var loc = string.IsNullOrWhiteSpace(locale) ? "en-US" : locale.Trim();
         var primary = loc.Split('-')[0];
-        return $"{loc},{primary};q=0.9";
+        return $"{loc},{primary}";
     }
 
     /// <summary>与真实 Chrome 完全一致的 userAgentMetadata（Client Hints）。</summary>
