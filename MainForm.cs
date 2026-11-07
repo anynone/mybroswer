@@ -8,7 +8,20 @@ namespace RiBrowser;
 internal sealed class MainForm : Form
 {
     internal const string HomePage = "https://www.baidu.com";
-    private const string SearchUrl = "https://www.baidu.com/s?wd={0}";
+
+    // 支持的搜索引擎：地址栏输入非 URL 时按当前配置的模板跳转（⋮ 菜单可切换）
+    private static readonly (string Id, string Name, string Template)[] SearchEngines =
+    {
+        ("google", "Google", "https://www.google.com/search?q={0}"),
+        ("baidu", "百度", "https://www.baidu.com/s?wd={0}"),
+    };
+
+    private static string SearchTemplate()
+    {
+        foreach (var e in SearchEngines)
+            if (e.Id == PrivacySettings.Current.SearchEngine) return e.Template;
+        return SearchEngines[0].Template;
+    }
 
     private static readonly Color StripColor = Color.FromArgb(0xDE, 0xE1, 0xE6);
     private static readonly Color ToolbarColor = Color.White;
@@ -549,7 +562,7 @@ internal sealed class MainForm : Form
                 ? "http://" + s
                 : "https://" + s;
         }
-        return string.Format(SearchUrl, Uri.EscapeDataString(s));
+        return string.Format(SearchTemplate(), Uri.EscapeDataString(s));
     }
 
     private void UpdateNavState(BrowserTab tab)
@@ -628,6 +641,23 @@ internal sealed class MainForm : Form
         menu.Items.Add(MenuStyle.Item(
             AdBlocker.Enabled ? "广告拦截 ✓（已拦截 " + AdBlocker.BlockedCount + " 次）" : "广告拦截 ✗（已关闭）",
             "\uE72E", (s, e) => AdBlocker.Toggle()));
+
+        // 搜索引擎切换（当前项打勾，即时生效并持久化）
+        var engineMenu = MenuStyle.Item("搜索引擎", "\uE721", null);
+        foreach (var se in SearchEngines)
+        {
+            var id = se.Id;
+            engineMenu.DropDownItems.Add(MenuStyle.Item(
+                PrivacySettings.Current.SearchEngine == id ? se.Name + "  ✓" : se.Name, null,
+                (s, e) =>
+                {
+                    if (PrivacySettings.Current.SearchEngine == id) return;
+                    PrivacySettings.Current.SearchEngine = id;
+                    PrivacySettings.Current.Save();
+                }));
+        }
+        MenuStyle.HookSubmenuRounding(engineMenu);
+        menu.Items.Add(engineMenu);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(MenuStyle.Item("关于 Ri 浏览器", "\uE946", (s, e) => ShowAbout()));
         menu.Items.Add(MenuStyle.Item("退出", "\uE7E8", (s, e) => Close()));

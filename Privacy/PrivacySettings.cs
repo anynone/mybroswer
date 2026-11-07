@@ -34,6 +34,9 @@ public sealed class PrivacySettings
     /// <summary>书签栏是否显示（Ctrl+Shift+B 切换）</summary>
     public bool ShowBookmarkBar { get; set; } = true;
 
+    /// <summary>默认搜索引擎（google / baidu），地址栏非 URL 输入时使用</summary>
+    public string SearchEngine { get; set; } = "google";
+
     /// <summary>Canvas 扰动种子（同一配置指纹稳定，换种子即换指纹）</summary>
     public string FingerprintSeed { get; set; } = "";
 
