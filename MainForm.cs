@@ -7,7 +7,19 @@ namespace RiBrowser;
 
 internal sealed class MainForm : Form
 {
-    internal const string HomePage = "https://www.baidu.com";
+    // 启动页地址：来自设置（默认 Google），为空或非法时回退
+    private static string HomeUrl()
+    {
+        var s = (PrivacySettings.Current.HomePage ?? "").Trim();
+        if (s.Length == 0) return "https://www.google.com";
+        if (!s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            s = s.Contains('.') ? "https://" + s : "";
+        }
+        return Uri.TryCreate(s, UriKind.Absolute, out var u) &&
+               (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps) ? u.AbsoluteUri : "https://www.google.com";
+    }
 
     // 支持的搜索引擎：地址栏输入非 URL 时按当前配置的模板跳转（⋮ 菜单可切换）
     private static readonly (string Id, string Name, string Template)[] SearchEngines =
@@ -95,7 +107,7 @@ internal sealed class MainForm : Form
         _tips.SetToolTip(_reloadButton, "刷新 / 停止 (F5)");
 
         _homeButton = new IconButton { Glyph = "\uE80F", AccessibleName = "主页" };
-        _homeButton.Click += (s, e) => _activeTab?.Browser.Load(HomePage);
+        _homeButton.Click += (s, e) => _activeTab?.Browser.Load(HomeUrl());
         _tips.SetToolTip(_homeButton, "主页");
 
         _menuButton = new IconButton { Glyph = "\uE712", AccessibleName = "菜单" };
@@ -190,7 +202,7 @@ internal sealed class MainForm : Form
         KeyDown += OnFormKeyDown;
         Resize += (s, e) => UpdateMaximizeGlyph();
 
-        AddTab(HomePage);
+        AddTab(HomeUrl());
 
         if (Environment.GetCommandLineArgs().Contains("--selftest"))
             RunSelfTest();
@@ -428,7 +440,7 @@ internal sealed class MainForm : Form
 
     internal BrowserTab AddTab(string? url = null)
     {
-        url ??= HomePage;
+        url ??= HomeUrl();
 
         var browser = new ChromiumWebBrowser(url)
         {
@@ -658,6 +670,22 @@ internal sealed class MainForm : Form
         }
         MenuStyle.HookSubmenuRounding(engineMenu);
         menu.Items.Add(engineMenu);
+
+        // 启动页配置：预设 / 当前页 / 自定义输入，当前项打勾
+        var homeMenu = MenuStyle.Item("启动页", "\uE80F", null);
+        var homeNow = HomeUrl();
+        foreach (var (name, url) in new[] { ("Google", "https://www.google.com"), ("百度", "https://www.baidu.com") })
+        {
+            var u = url;
+            homeMenu.DropDownItems.Add(MenuStyle.Item(
+                homeNow == u ? name + "  ✓" : name, null,
+                (s, e) => SetHomePage(u)));
+        }
+        if (_activeTab is { } cur && !string.IsNullOrEmpty(cur.Browser.Address) && cur.Browser.Address.StartsWith("http"))
+            homeMenu.DropDownItems.Add(MenuStyle.Item("使用当前页", null, (s, e) => SetHomePage(cur.Browser.Address)));
+        homeMenu.DropDownItems.Add(MenuStyle.Item("自定义…", null, (s, e) => PromptCustomHomePage()));
+        MenuStyle.HookSubmenuRounding(homeMenu);
+        menu.Items.Add(homeMenu);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(MenuStyle.Item("关于 Ri 浏览器", "\uE946", (s, e) => ShowAbout()));
         menu.Items.Add(MenuStyle.Item("退出", "\uE7E8", (s, e) => Close()));
@@ -672,6 +700,57 @@ internal sealed class MainForm : Form
         using var form = new SettingsForm(PrivacySettings.Current,
             onChanged: _ => _privacy.SettingsChanged(_tabs.ToList()));
         form.ShowDialog(this);
+    }
+
+    private void SetHomePage(string url)
+    {
+        PrivacySettings.Current.HomePage = url;
+        PrivacySettings.Current.Save();
+    }
+
+    /// <summary>自定义启动页输入框：空输入/非法地址保持原值不变。</summary>
+    private void PromptCustomHomePage()
+    {
+        using var form = new Form
+        {
+            Text = "自定义启动页",
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ClientSize = new Size(420, 118),
+            Font = new Font("Segoe UI", 9F),
+        };
+        var label = new Label { Text = "启动页地址（新标签页与主页按钮）", AutoSize = true, Location = new Point(12, 15) };
+        var input = new TextBox
+        {
+            Text = HomeUrl(),
+            Location = new Point(12, 38),
+            Width = 396,
+        };
+        var ok = new Button { Text = "确定", DialogResult = DialogResult.OK, Location = new Point(248, 76), Width = 75 };
+        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Location = new Point(333, 76), Width = 75 };
+        form.Controls.AddRange(new Control[] { label, input, ok, cancel });
+        form.AcceptButton = ok;
+        form.CancelButton = cancel;
+
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            var s = input.Text.Trim();
+            if (s.Length == 0) return;
+            if (!s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                s = "https://" + s;
+            if (Uri.TryCreate(s, UriKind.Absolute, out var u) &&
+                (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps))
+            {
+                SetHomePage(u.AbsoluteUri);
+            }
+            else
+            {
+                ShowMessage("地址无效：" + input.Text);
+            }
+        }
     }
 
     private void ShowScriptsForm()

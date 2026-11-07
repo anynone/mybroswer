@@ -37,6 +37,9 @@ public sealed class PrivacySettings
     /// <summary>默认搜索引擎（google / baidu），地址栏非 URL 输入时使用</summary>
     public string SearchEngine { get; set; } = "google";
 
+    /// <summary>启动页地址（新标签页与主页按钮），默认 Google</summary>
+    public string HomePage { get; set; } = "https://www.google.com";
+
     /// <summary>Canvas 扰动种子（同一配置指纹稳定，换种子即换指纹）</summary>
     public string FingerprintSeed { get; set; } = "";
 
