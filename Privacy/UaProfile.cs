@@ -29,9 +29,12 @@ internal static class UaProfile
 
     public static string ChromeMajor() => ChromeFullVersion().Split('.')[0];
 
+    /// <summary>Chrome 106+ 桌面版 UA 字符串（UA Reduction Phase 6）：
+    /// 小版本冻结为 0.0.0，真实完整版本只出现在 Client Hints fullVersionList。
+    /// UA 里带真实小版本号会被伪装检测识别为手工伪造的 UserAgent。</summary>
     public static string ChromeUA() =>
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/"
-        + ChromeFullVersion() + " Safari/537.36";
+        + ChromeMajor() + ".0.0.0 Safari/537.36";
 
     /// <summary>指定 BCP-47 语言的 Accept-Language（主语言 + 语系回退，与 Chrome 派生规则一致）。
     /// 不能带 q 值：CDP 覆盖与 CEF AcceptLanguageList 会各自追加权重，产生 ";q=0.9;q=0.9" 畸形头。</summary>
