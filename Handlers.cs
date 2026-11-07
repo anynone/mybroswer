@@ -70,6 +70,12 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings browserSettings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
+        // 空地址弹窗（window.open('') 探测/占位窗，如隐私分析站的 10×10 探测窗）：
+        // 按"弹窗已拦截"静默取消——window.open 返回 null，站点会走"已拦截"分支；
+        // 之前把它开成新标签页还抢焦点，表现为"点击后跳到 about:blank"
+        if (string.IsNullOrWhiteSpace(targetUrl) ||
+            targetUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase))
+            return true;
         _form.UiAddTab(targetUrl);
         return true; // 取消默认弹窗，改为新标签页
     }
