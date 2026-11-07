@@ -657,25 +657,44 @@
       cx.drawImage(cv, 0, 0);
       var d = realGID.call(cx, 0, 0, cl.width, cl.height);
       var a = d.data, px = cl.width * cl.height;
-      var seed = (C.seed ^ hashArr(a)) >>> 0;
+      // 幂等加噪设计（关键：noised(noised(x)) === noised(x)，否则检测站把
+      // toDataURL 解码回画布再 getImageData 对比时二层噪声对不上即被识破）：
+      //   1) 种子只取不透明像素的 G/B/A —— 这些通道不被噪声触碰，
+      //      且在 PNG 编解码/预乘 alpha 往返中无损，二次加噪得到相同种子
+      //   2) 只修改不透明像素的 R 最低位，且用"强制置位"代替 XOR ——
+      //      置两次等于置一次，天然幂等
+      var h = 0x811c9dc5, n = 0;
+      for (var p0 = 0; p0 < px; p0++) {
+        var o0 = p0 * 4;
+        if (a[o0 + 3] !== 255) continue;
+        n++;
+        h = Math.imul(h ^ a[o0 + 1], 0x01000193) >>> 0;
+        h = Math.imul(h ^ a[o0 + 2], 0x01000193) >>> 0;
+      }
+      var seed = (C.seed ^ Math.imul(h ^ n, 0x01000193)) >>> 0;
       var r = rnd(seed);
-      // 只翻转非透明像素的 R 通道最低位（视觉不可见）
       var flipped = 0;
       for (var p = 0; p < px; p++) {
         var o = p * 4;
-        if (a[o + 3] === 0) continue;
-        if ((r() & 7) === 0) { a[o] ^= 1; flipped++; }
+        if (a[o + 3] !== 255) continue;
+        if ((r() & 7) === 0) {
+          a[o] = (a[o] & 0xFE) | ((p ^ seed) & 1); // 强制置位（幂等），目标位由位置与种子决定
+          flipped++;
+        }
       }
-      if (!flipped) {
-        // 保底：整个画布都没有命中时，按种子选定一个非透明像素
+      if (!flipped && n > 0) {
+        // 保底：按种子选定一个不透明像素强制置位
         var r2 = rnd((C.seed ^ Math.imul(seed, 0x9e3779b1)) >>> 0);
         var k = 1 + (r2() % 107);
         var seen = 0;
         for (var p2 = 0; p2 < px; p2++) {
           var o2 = p2 * 4;
-          if (a[o2 + 3] === 0) continue;
+          if (a[o2 + 3] !== 255) continue;
           seen++;
-          if (seen % k === 0) { a[o2] ^= 1; break; }
+          if (seen % k === 0) {
+            a[o2] = (a[o2] & 0xFE) | ((p2 ^ seed) & 1);
+            break;
+          }
         }
       }
       cx.putImageData(d, 0, 0);
