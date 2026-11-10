@@ -28,6 +28,18 @@ public sealed class PrivacySettings
     /// <summary>WebRTC 防泄露（默认开）</summary>
     public bool WebrtcGuard { get; set; } = true;
 
+    /// <summary>
+    /// 位置伪装：开启后 Geolocation API 返回 LocationLat/Lng 自设坐标；关闭时下发
+    /// 超界坐标强制"位置不可用"。默认开，坐标默认洛杉矶市中心——与默认伪装身份
+    /// （America/Los_Angeles 时区 + en-US）配套成完整地理画像。
+    /// 坐标 0/0 视为未设置，不生效。
+    /// </summary>
+    public bool LocationSpoof { get; set; } = true;
+
+    public double LocationLat { get; set; } = 34.0522;
+
+    public double LocationLng { get; set; } = -118.2437;
+
     /// <summary>白名单域名（含子域），命中后不启用任何伪装</summary>
     public List<string> PrivacyAllowlist { get; set; } = new();
 

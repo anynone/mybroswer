@@ -56,9 +56,11 @@ Handlers.cs     CEF 处理器：弹窗转标签、快捷键、下载
 
 可配置项（`%LocalAppData%\RiBrowser\settings.json`）：
 
-- **身份伪装**：User-Agent（与 Chrome 一致 / 自定义）、浏览器语言、页面时区
+- **身份伪装**：User-Agent（与 Chrome 一致 / 自定义）、浏览器语言、页面时区、位置伪装（Geolocation 返回自设坐标）
 - **指纹防护**：字体指纹防护（默认开）、WebRTC 防泄露（默认开）、Canvas 指纹扰动（默认关，可换种子）
 - **白名单**：不启用任何伪装的域名（含子域），按 frame 独立判定
+
+**位置伪装**（默认开，洛杉矶市中心 34.0522, -118.2437）：网页 `navigator.geolocation` 拿到的就是自设坐标（如 Google Maps 定位到设定城市）。机制：CDP `Emulation.setGeolocationOverride`（同 DevTools 传感器面板）+ `GeolocationPermissionHandler` 对定位权限请求自动放行（拿到的本就是伪造坐标，放行无泄露风险）。关闭时下发超界坐标强制"位置不可用"——即使伪装期的授权被持久化到 profile 也不会回落真实定位；白名单站点完全原生。建议与伪装时区配套使用。CEF 内核本身无可用定位数据源，未开启伪装时 Geolocation API 本就取不到真实位置。
 
 实现架构（对齐参考项目 Polaris）：
 

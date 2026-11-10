@@ -1,6 +1,7 @@
 using CefSharp;
 using CefSharp.Handler;
 using System.Windows.Forms;
+using RiBrowser.Privacy;
 
 namespace RiBrowser;
 
@@ -17,6 +18,25 @@ internal sealed class GlobalRequestHandler : RequestHandler
         string requestInitiator, ref bool disableDefaultHandling)
     {
         return _adBlock;
+    }
+}
+
+/// <summary>权限请求处理：
+/// 位置伪装开启时对 Geolocation 请求自动放行——页面能取到的是 CDP 下发的自设坐标，
+/// 放行不暴露真实位置；伪装关闭（或坐标未设置、白名单站点）时显式拒绝定位请求，
+/// 其余权限类型交还默认（CEF 无权限弹窗 UI，即取消）。</summary>
+internal sealed class GeolocationPermissionHandler : PermissionHandler
+{
+    protected override bool OnShowPermissionPrompt(IWebBrowser chromiumWebBrowser, IBrowser browser,
+        ulong promptId, string requestingOrigin, PermissionRequestType requestedPermissions,
+        IPermissionPromptCallback callback)
+    {
+        if ((requestedPermissions & PermissionRequestType.Geolocation) == 0) return false;
+        var s = PrivacySettings.Current;
+        var spoof = s.LocationSpoof && (s.LocationLat != 0 || s.LocationLng != 0)
+            && !PrivacyEngine.IsAllowedUrl(requestingOrigin, s);
+        callback.Continue(spoof ? PermissionRequestResult.Accept : PermissionRequestResult.Deny);
+        return true;
     }
 }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using RiBrowser.Privacy;
 
 namespace RiBrowser;
@@ -13,6 +14,9 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _uaCustom = new();
     private readonly ComboBox _langCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _tzCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly CheckBox _locCheck = new() { Text = "位置伪装（网页 Geolocation 取到自设坐标，而非真实位置）", AutoSize = true };
+    private readonly TextBox _locLat = new() { PlaceholderText = "纬度，如 34.0522（洛杉矶）" };
+    private readonly TextBox _locLng = new() { PlaceholderText = "经度，如 -118.2437" };
     private readonly CheckBox _fontCheck = new() { Text = "字体指纹防护（阻断字体宽度探测，中文字体恒报未安装）", AutoSize = true };
     private readonly CheckBox _webrtcCheck = new() { Text = "WebRTC 防泄露（隐藏页面可见的本机 IP）", AutoSize = true };
     private readonly CheckBox _canvasCheck = new() { Text = "Canvas 指纹扰动", AutoSize = true };
@@ -33,7 +37,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 600);
+        ClientSize = new Size(560, 640);
         AutoScroll = true;
         Font = new Font("Segoe UI", 9f);
 
@@ -45,7 +49,7 @@ internal sealed class SettingsForm : Form
         {
             Text = "所有修改即时保存并生效；浏览器语言修改后重启可深入 Web Worker。",
             AutoSize = true,
-            Location = new Point(18, 558),
+            Location = new Point(18, 596),
             ForeColor = Muted,
         };
         Controls.Add(note);
@@ -55,7 +59,7 @@ internal sealed class SettingsForm : Form
 
     private void BuildIdentityGroup()
     {
-        var g = new GroupBox { Text = "身份伪装", Bounds = new Rectangle(12, 10, 536, 216) };
+        var g = new GroupBox { Text = "身份伪装", Bounds = new Rectangle(12, 10, 536, 252) };
 
         _uaCombo.Items.AddRange(new object[] { "与 Chrome 一致", "自定义" });
         _uaCombo.Bounds = new Rectangle(120, 26, 300, 24);
@@ -103,11 +107,20 @@ internal sealed class SettingsForm : Form
             ForeColor = Muted,
         };
 
+        // 位置伪装：勾选 + 自设经纬度（与伪装时区配套用更像本地人）
+        _locCheck.Location = new Point(16, 192);
+        _locCheck.CheckedChanged += (s, e) => { _s.LocationSpoof = _locCheck.Checked; Changed(); };
+        _locLat.SetBounds(64, 218, 130, 24);
+        _locLat.TextChanged += (s, e) => ParseCoord(_locLat, v => _s.LocationLat = v);
+        _locLng.SetBounds(220, 218, 130, 24);
+        _locLng.TextChanged += (s, e) => ParseCoord(_locLng, v => _s.LocationLng = v);
+
         g.Controls.AddRange(new Control[]
         {
             MakeLabel("User-Agent：", 30), _uaCombo, _uaCustom,
             MakeLabel("浏览器语言：", 94), _langCombo,
             MakeLabel("页面时区：", 132), _tzCombo, tip,
+            _locCheck, _locLat, _locLng,
         });
         Controls.Add(g);
 
@@ -120,13 +133,16 @@ internal sealed class SettingsForm : Form
         }
         _langCombo.SelectedIndex = SelectLang(_s.BrowserLanguage);
         _tzCombo.SelectedIndex = SelectTz(_s.Timezone);
+        _locCheck.Checked = _s.LocationSpoof;
+        if (_s.LocationLat != 0) _locLat.Text = _s.LocationLat.ToString(CultureInfo.InvariantCulture);
+        if (_s.LocationLng != 0) _locLng.Text = _s.LocationLng.ToString(CultureInfo.InvariantCulture);
     }
 
     // ---- 指纹防护 ----
 
     private void BuildFingerprintGroup()
     {
-        var g = new GroupBox { Text = "指纹防护", Bounds = new Rectangle(12, 234, 536, 150) };
+        var g = new GroupBox { Text = "指纹防护", Bounds = new Rectangle(12, 270, 536, 150) };
 
         _fontCheck.SetBounds(16, 30, 460, 22);
         _fontCheck.CheckedChanged += (s, e) => { _s.FontGuard = _fontCheck.Checked; Changed(); };
@@ -158,7 +174,7 @@ internal sealed class SettingsForm : Form
 
     private void BuildAllowlistGroup()
     {
-        var g = new GroupBox { Text = "白名单（不启用任何伪装的站点，含子域）", Bounds = new Rectangle(12, 392, 536, 156) };
+        var g = new GroupBox { Text = "白名单（不启用任何伪装的站点，含子域）", Bounds = new Rectangle(12, 428, 536, 156) };
 
         _allowList.SetBounds(16, 26, 500, 82);
         foreach (var d in _s.PrivacyAllowlist) _allowList.Items.Add(d);
@@ -188,6 +204,13 @@ internal sealed class SettingsForm : Form
     }
 
     // ---- 辅助 ----
+
+    /// <summary>坐标输入框：解析成功才写入设置（非法输入保持旧值，不弹窗打扰）。</summary>
+    private void ParseCoord(TextBox box, Action<double> set)
+    {
+        if (double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) set(v);
+        Changed();
+    }
 
     private static readonly string[] LangValues =
         { "", "en-US", "en-GB", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "de-DE", "fr-FR", "ru-RU", "es-ES", "pt-BR" };

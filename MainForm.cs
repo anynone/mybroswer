@@ -451,6 +451,7 @@ internal sealed class MainForm : Form
             DownloadHandler = new DownloadHandler(this),
             MenuHandler = new ContextMenuHandler(this),
             RequestHandler = new GlobalRequestHandler(),
+            PermissionHandler = new GeolocationPermissionHandler(),
         };
         // 反机器人检测：CefSharp 默认向每个页面注入 window.CefSharp / window.cefSharp
         // 全局对象（BindObjectAsync 等），browserscan 等 bot 检测以此判定"机器人"。

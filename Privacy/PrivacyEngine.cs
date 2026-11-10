@@ -6,7 +6,7 @@ namespace RiBrowser.Privacy;
 
 /// <summary>
 /// 隐私防护引擎（CEF 移植）：
-///  - CDP Emulation 覆盖：UA / Accept-Language / Client Hints、页面时区、Intl locale
+///  - CDP Emulation 覆盖：UA / Accept-Language / Client Hints、页面时区、Intl locale、位置伪装
 ///    （经 CefThread.ExecuteOnUiThread 在 CEF UI 线程下发）
 ///  - 垫片注入：IRenderProcessMessageHandler.OnContextCreated（每个 frame 的 V8
 ///    上下文创建时执行，等价 document_start，先于页面脚本）+ 设置变更时 frame 树 sweep
@@ -89,6 +89,31 @@ internal sealed class PrivacyEngine
             var loc = !allow && !string.IsNullOrEmpty(s.BrowserLanguage) ? s.BrowserLanguage : "";
             Send(host, "Emulation.setLocaleOverride",
                 loc.Length > 0 ? JsonSerializer.Serialize(new { locale = loc }) : "{}");
+        }
+
+        // 4) 位置伪装（Emulation.setGeolocationOverride，同 DevTools 传感器面板机制）：
+        //    开启 → 页面拿到自设坐标；关闭/未设坐标 → 下发超界坐标，CDP 规定非法经纬度
+        //    一律报"位置不可用"——即使伪装期的授权被持久化到 profile，也绝不回落到
+        //    真实定位数据源。仅白名单站点清除覆盖（完全内核原生行为）。
+        //    权限放行见 GeolocationPermissionHandler，二者缺一不可。
+        {
+            var on = !allow && s.LocationSpoof && (s.LocationLat != 0 || s.LocationLng != 0);
+            if (allow)
+                Send(host, "Emulation.clearGeolocationOverride", "{}");
+            else if (on)
+                Send(host, "Emulation.setGeolocationOverride", JsonSerializer.Serialize(new
+                {
+                    latitude = s.LocationLat,
+                    longitude = s.LocationLng,
+                    accuracy = 35,
+                }));
+            else
+                Send(host, "Emulation.setGeolocationOverride", JsonSerializer.Serialize(new
+                {
+                    latitude = 90.1,   // 超界 → 恒 POSITION_UNAVAILABLE
+                    longitude = 90.1,
+                    accuracy = 60,
+                }));
         }
     }
 
