@@ -343,36 +343,3 @@ internal sealed class TabSearchForm : Form
         }
     }
 }
-
-/// <summary>标签条最左侧的圆形下拉箭头按钮（Chrome Tab Search 同款）。</summary>
-internal sealed class TabSearchButton : Control
-{
-    private bool _hover;
-
-    public TabSearchButton()
-    {
-        Size = new Size(32, 32);
-        Cursor = Cursors.Hand;
-        TabStop = false;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
-                 | ControlStyles.UserPaint | ControlStyles.UserMouse | ControlStyles.ResizeRedraw, true);
-    }
-
-    protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        var r = new Rectangle(3, 3, Width - 7, Height - 7);
-        // 圆形描边（Chrome 样式），悬停加深
-        using var pen = new Pen(_hover ? UiColors.Text : UiColors.TextMuted, 1.4f);
-        g.DrawEllipse(pen, r);
-        // 圆内向下箭头
-        using var font = MainForm.IconFontOf(7.5f);
-        TextRenderer.DrawText(g, "\uE70D", font, new Rectangle(0, 0, Width, Height + 1),
-            _hover ? UiColors.Text : UiColors.TextMuted,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
-    }
-}

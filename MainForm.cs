@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
     private readonly IconButton _reloadButton;
     private readonly IconButton _homeButton;
     private readonly IconButton _menuButton;
-    private readonly TabSearchButton _tabSearchButton;
+    private readonly IconButton _tabSearchButton;
     private readonly AddressBar _addressBar;
     private readonly WindowButton _minButton;
     private readonly WindowButton _maxButton;
@@ -193,10 +193,10 @@ internal sealed class MainForm : Form
         _tabStrip.Controls.Add(_tabFlow);
         _tabStrip.Controls.Add(windowButtons);
 
-        // 标签条最左侧的圆形下拉箭头：弹出标签搜索浮层（Chrome 同款）
+        // 标签条最左侧的下拉箭头：弹出标签搜索浮层（与工具栏按钮同款样式）
         var tabSearchHost = new Panel { Dock = DockStyle.Left, Width = 42, BackColor = StripColor };
-        _tabSearchButton = new TabSearchButton();
-        _tabSearchButton.SetBounds(5, 6, 32, 32);
+        _tabSearchButton = new IconButton { Glyph = "\uE70D", GlyphSize = 9f, AccessibleName = "搜索标签页" };
+        _tabSearchButton.SetBounds(6, 7, 30, 30);
         _tabSearchButton.Click += (s, e) => ShowTabSearchMenu();
         _tips.SetToolTip(_tabSearchButton, "搜索标签页  Ctrl+Shift+A");
         tabSearchHost.Controls.Add(_tabSearchButton);
