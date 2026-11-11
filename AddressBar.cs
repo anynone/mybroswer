@@ -23,7 +23,7 @@ internal sealed class AddressBar : Control
                  | ControlStyles.ResizeRedraw
                  | ControlStyles.UserPaint, true);
         Cursor = Cursors.IBeam;
-        Height = 30;
+        Height = 35;
 
         _box.Enter += (s, e) => { _box.BackColor = Color.White; Invalidate(); };
         _box.Leave += (s, e) => { _box.BackColor = BackColorOfPill; Invalidate(); };

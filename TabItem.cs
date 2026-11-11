@@ -32,7 +32,7 @@ internal sealed class TabItem : Control
 
     public TabItem()
     {
-        Size = new Size(190, 34);
+        Size = new Size(190, 38);
         Margin = new Padding(0);
         Cursor = Cursors.Default;
         SetStyle(ControlStyles.AllPaintingInWmPaint

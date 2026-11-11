@@ -87,7 +87,7 @@ internal sealed class MainForm : Form
         _content = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
 
         // ---- 工具栏（后退/前进/刷新/主页/地址栏/菜单）----
-        _toolbar = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = ToolbarColor };
+        _toolbar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = ToolbarColor };
 
         _backButton = new IconButton { Glyph = "\uE72B", AccessibleName = "后退" };
         _backButton.Click += (s, e) => UiBack();
@@ -125,7 +125,7 @@ internal sealed class MainForm : Form
         };
         _addressBar.StarClicked += ToggleBookmarkForCurrent;
 
-        // ---- 书签栏 ----
+        // ---- 书签栏（存在书签且开关打开时显示，Chrome 同款）----
         _showBookmarkBar = PrivacySettings.Current.ShowBookmarkBar;
         _bookmarkBar = new BookmarkBar();
         _bookmarkBar.OpenInCurrentTab += url => _activeTab?.Browser.Load(url);
@@ -133,9 +133,9 @@ internal sealed class MainForm : Form
         Bookmarks.Changed += () => Ui(() =>
         {
             _bookmarkBar.Reload();
-            _bookmarkBar.Visible = _showBookmarkBar;
+            _bookmarkBar.Visible = _showBookmarkBar && Bookmarks.Items.Count > 0;
         });
-        _bookmarkBar.Visible = _showBookmarkBar;
+        _bookmarkBar.Visible = _showBookmarkBar && Bookmarks.Items.Count > 0;
 
         _toolbar.Controls.AddRange(new Control[]
         {
@@ -145,14 +145,14 @@ internal sealed class MainForm : Form
         LayoutToolbar();
 
         // ---- 标签条（左：标签 + 新建；右：窗口控制按钮；空白处可拖动窗口）----
-        _tabStrip = new CaptionStripPanel { Dock = DockStyle.Top, Height = 38, BackColor = StripColor };
+        _tabStrip = new CaptionStripPanel { Dock = DockStyle.Top, Height = 45, BackColor = StripColor };
         _tabFlow = new CaptionFlowPanel
         {
             Dock = DockStyle.Fill,
             WrapContents = false,
             AutoScroll = false,
             Margin = new Padding(0),
-            Padding = new Padding(6, 4, 6, 0),
+            Padding = new Padding(6, 5, 6, 0),
         };
         _tabFlow.Resize += (s, e) => UpdateTabWidths();
 
@@ -161,8 +161,8 @@ internal sealed class MainForm : Form
             Text = "\uE710",
             Font = IconFont,
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(30, 28),
-            Margin = new Padding(3, 4, 0, 0),
+            Size = new Size(30, 34),
+            Margin = new Padding(3, 6, 0, 0),
             ForeColor = Color.FromArgb(0x3C, 0x40, 0x43),
             BackColor = StripColor,
             TabStop = false,
@@ -661,7 +661,7 @@ internal sealed class MainForm : Form
     private void ToggleBookmarkBar()
     {
         _showBookmarkBar = !_showBookmarkBar;
-        _bookmarkBar.Visible = _showBookmarkBar;
+        _bookmarkBar.Visible = _showBookmarkBar && Bookmarks.Items.Count > 0;
         PrivacySettings.Current.ShowBookmarkBar = _showBookmarkBar;
         PrivacySettings.Current.Save();
     }
@@ -806,13 +806,13 @@ internal sealed class MainForm : Form
 
     private void LayoutToolbar()
     {
-        _backButton.SetBounds(8, 5, 34, 34);
-        _forwardButton.SetBounds(46, 5, 34, 34);
-        _reloadButton.SetBounds(84, 5, 34, 34);
-        _homeButton.SetBounds(122, 5, 34, 34);
+        _backButton.SetBounds(8, 7, 34, 34);
+        _forwardButton.SetBounds(46, 7, 34, 34);
+        _reloadButton.SetBounds(84, 7, 34, 34);
+        _homeButton.SetBounds(122, 7, 34, 34);
         var pillWidth = Math.Max(80, _toolbar.Width - NavBarLeft - 52);
-        _addressBar.SetBounds(NavBarLeft, 7, pillWidth, 30);
-        _menuButton.SetBounds(_toolbar.Width - 44, 5, 34, 34);
+        _addressBar.SetBounds(NavBarLeft, 6, pillWidth, 35); // 地址/搜索框 35px
+        _menuButton.SetBounds(_toolbar.Width - 44, 7, 34, 34);
     }
 
     private void OnFormKeyDown(object? sender, KeyEventArgs e)
