@@ -62,6 +62,7 @@ internal sealed class MainForm : Form
     private readonly IconButton _reloadButton;
     private readonly IconButton _homeButton;
     private readonly IconButton _menuButton;
+    private readonly IconButton _tabSearchButton;
     private readonly AddressBar _addressBar;
     private readonly WindowButton _minButton;
     private readonly WindowButton _maxButton;
@@ -191,6 +192,15 @@ internal sealed class MainForm : Form
 
         _tabStrip.Controls.Add(_tabFlow);
         _tabStrip.Controls.Add(windowButtons);
+
+        // 标签条最左侧的向下箭头：下拉列出打开的标签页 + 最近关闭（Chrome 同款）
+        var tabSearchHost = new Panel { Dock = DockStyle.Left, Width = 42, BackColor = StripColor };
+        _tabSearchButton = new IconButton { Glyph = "\uE70D", AccessibleName = "标签页列表" };
+        _tabSearchButton.SetBounds(6, 7, 30, 30);
+        _tabSearchButton.Click += (s, e) => ShowTabSearchMenu();
+        _tips.SetToolTip(_tabSearchButton, "标签页列表  Ctrl+Shift+A");
+        tabSearchHost.Controls.Add(_tabSearchButton);
+        _tabStrip.Controls.Add(tabSearchHost);
 
         // Dock 顺序：内容区先加，标签条最后加 → 标签条最上方，其下工具栏、书签栏
         Controls.Add(_content);
@@ -524,6 +534,8 @@ internal sealed class MainForm : Form
         var index = _tabs.IndexOf(tab);
         if (index < 0) return;
 
+        // 记入"最近关闭"，供标签条下拉箭头重新打开
+        ClosedTabs.Push(tab.TabItem.Title, tab.Browser.Address);
         _privacy.Detach(tab);
         _tabs.RemoveAt(index);
         _tabFlow.Controls.Remove(tab.TabItem);
@@ -618,6 +630,66 @@ internal sealed class MainForm : Form
     }
 
     // ==================== 供 CEF 处理器跨线程调用 ====================
+
+    /// <summary>本窗口全部标签（标签下拉列表用）。</summary>
+    internal IReadOnlyList<BrowserTab> Tabs => _tabs;
+
+    internal BrowserTab? ActiveTab => _activeTab;
+
+    internal void UiSelectTab(BrowserTab tab) => Ui(() => SelectTab(tab));
+
+    internal void UiActivate() => Ui(() => { Show(); Activate(); });
+
+    internal void UiShowTabSearchMenu() => Ui(ShowTabSearchMenu);
+
+    /// <summary>标签条左侧下拉箭头：打开的标签页 + 最近关闭的标签页（Chrome 同款）。</summary>
+    private void ShowTabSearchMenu()
+    {
+        var menu = new ContextMenuStrip { Font = new Font("Segoe UI", 9f), Renderer = new ChromeRenderer(), ShowImageMargin = false };
+
+        foreach (var win in Program.Windows.ToList())
+        {
+            foreach (var tab in win.Tabs.ToList())
+            {
+                var (w, t) = (win, tab);
+                var title = string.IsNullOrWhiteSpace(t.TabItem.Title)
+                    ? (t.Browser.Address ?? "新标签页")
+                    : t.TabItem.Title;
+                var active = ReferenceEquals(w, this) && ReferenceEquals(t, _activeTab);
+                var item = MenuStyle.Item(title, null, (s, e) =>
+                {
+                    w.UiSelectTab(t);
+                    if (!ReferenceEquals(w, this)) w.UiActivate(); // 其他窗口的标签：切过去并前置该窗口
+                });
+                item.Font = active ? new Font(item.Font, FontStyle.Bold) : item.Font; // 当前标签加粗
+                menu.Items.Add(item);
+            }
+        }
+
+        menu.Items.Add(new ToolStripSeparator());
+        var closed = ClosedTabs.Items.ToList();
+        if (closed.Count == 0)
+        {
+            var none = MenuStyle.Item("（最近没有关闭的标签页）", null, (s, e) => { });
+            none.Enabled = false;
+            menu.Items.Add(none);
+        }
+        else
+        {
+            foreach (var (title, url) in closed)
+            {
+                var (t2, u) = (title, url);
+                menu.Items.Add(MenuStyle.Item(t2, null, (s, e) =>
+                {
+                    ClosedTabs.Take(u);
+                    AddTab(u); // 重新打开到当前窗口并选中
+                }));
+            }
+        }
+
+        MenuStyle.EqualizeWidths(menu);
+        menu.Show(_tabSearchButton, new Point(0, _tabSearchButton.Height));
+    }
 
     internal void UiAddTab(string? url, bool select = true) => Ui(() => AddTab(url, select));
     internal void UiCloseActiveTab() => Ui(() => { if (_activeTab != null) CloseTab(_activeTab); });
@@ -830,6 +902,8 @@ internal sealed class MainForm : Form
                 ToggleBookmarkForCurrent(); e.Handled = true; break;
             case Keys.Control | Keys.Shift | Keys.B:
                 ToggleBookmarkBar(); e.Handled = true; break;
+            case Keys.Control | Keys.Shift | Keys.A:
+                ShowTabSearchMenu(); e.Handled = true; break;
             case Keys.F12:
             case Keys.Control | Keys.Shift | Keys.I:
                 ShowDevToolsForActiveTab(); e.Handled = true; break;

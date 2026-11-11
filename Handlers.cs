@@ -212,6 +212,7 @@ internal sealed class KeyboardHandler : IKeyboardHandler
         if (ctrl && key == (int)Keys.Oemcomma) { _form.UiOpenPrivacySettings(); return true; }
         if (ctrl && !shift && key == (int)Keys.D) { _form.UiToggleBookmark(); return true; }
         if (ctrl && shift && key == (int)Keys.B) { _form.UiToggleBookmarkBar(); return true; }
+        if (ctrl && shift && key == (int)Keys.A) { _form.UiShowTabSearchMenu(); return true; }
         if (key == (int)Keys.F12 || (ctrl && shift && key == (int)Keys.I)) { _form.UiShowDevToolsActive(); return true; }
         if ((ctrl && key == (int)Keys.L) || key == (int)Keys.F6) { _form.UiFocusAddress(); return true; }
         if ((ctrl && key == (int)Keys.R) || key == (int)Keys.F5) { _form.UiReload(); return true; }

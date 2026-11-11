@@ -95,6 +95,9 @@ internal static class Program
     // 最后一个窗口关闭时结束消息循环（与 Chrome 多窗口一致）。
     private static readonly List<System.Windows.Forms.Form> _windows = new();
 
+    /// <summary>当前打开的全部浏览器窗口（标签下拉列表用）。</summary>
+    internal static IEnumerable<MainForm> Windows => _windows.OfType<MainForm>();
+
     private static void Track(System.Windows.Forms.Form form)
     {
         _windows.Add(form);
