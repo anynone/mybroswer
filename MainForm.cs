@@ -72,7 +72,7 @@ internal sealed class MainForm : Form
     private readonly List<BrowserTab> _tabs = new();
     private BrowserTab? _activeTab;
 
-    public MainForm(string? initialUrl = null)
+    public MainForm(string? initialUrl = null, List<string>? restoreUrls = null, int restoreActive = 0)
     {
         Text = "Ri 浏览器";
         ClientSize = new Size(1200, 800);
@@ -202,8 +202,17 @@ internal sealed class MainForm : Form
         KeyDown += OnFormKeyDown;
         Resize += (s, e) => UpdateMaximizeGlyph();
 
-        // 新窗口（右键"在新窗口中打开链接"）首标签直接加载目标页
-        AddTab(initialUrl ?? HomeUrl());
+        // 新窗口（右键"在新窗口中打开链接"）首标签直接加载目标页；
+        // 会话恢复：上次异常终止 → 一次性恢复全部页面并选中原选中项
+        if (restoreUrls is { Count: > 0 })
+        {
+            for (var i = 0; i < restoreUrls.Count; i++)
+                AddTab(restoreUrls[i], select: i == Math.Clamp(restoreActive, 0, restoreUrls.Count - 1));
+        }
+        else
+        {
+            AddTab(initialUrl ?? HomeUrl());
+        }
 
         if (Environment.GetCommandLineArgs().Contains("--selftest"))
             RunSelfTest();
@@ -471,6 +480,7 @@ internal sealed class MainForm : Form
             _addressBar.IsStarred = _activeTab == tab && Bookmarks.Contains(e.Address);
             // 导航提交后重判白名单并重下发 CDP 覆盖（已注册垫片自动对新文档生效）
             _privacy.ApplyOnNavigation(tab);
+            SessionStore.Save(); // 会话恢复：地址变化立即落盘
         });
         browser.LoadingStateChanged += (s, e) => Ui(() =>
         {
@@ -492,9 +502,22 @@ internal sealed class MainForm : Form
 
         UpdateTabWidths();
         if (select) SelectTab(tab);
-        else browser.Visible = false; // 后台标签（右键"在新标签页中打开"）：不切换当前页
+        else
+        {
+            // 后台标签（右键"在新标签页中打开"/会话恢复）：不切换当前页。
+            // 窗体构造期创建的不可见控件不会被 WinForms 创建句柄，而 CEF 浏览器
+            // 是在 HandleCreated 时才初始化的——必须先强制创建句柄再隐藏，
+            // 否则该标签的浏览器永远不启动（标题停在"新标签页"、无 DevTools 目标）。
+            _ = browser.Handle;
+            browser.Visible = false;
+        }
+        SessionStore.Save();
         return tab;
     }
+
+    /// <summary>会话恢复用：当前窗口全部标签的 (地址, 是否选中) 快照。</summary>
+    internal IEnumerable<(string Url, bool Active)> TabSnapshot()
+        => _tabs.Select(t => (t.Browser.Address ?? string.Empty, ReferenceEquals(t, _activeTab)));
 
     internal void CloseTab(BrowserTab tab)
     {
@@ -517,6 +540,7 @@ internal sealed class MainForm : Form
 
         UpdateTabWidths();
         SelectTab(_tabs[Math.Min(index, _tabs.Count - 1)]);
+        SessionStore.Save(); // 关标签后落盘（最后标签走 Close() 由窗口注销处理）
     }
 
     private void SelectTab(BrowserTab tab)
@@ -533,6 +557,7 @@ internal sealed class MainForm : Form
         UpdateNavState(tab);
         ActiveControl = tab.Browser;
         tab.Browser.Focus();
+        SessionStore.Save(); // 切换标签改变恢复时的选中项
     }
 
     private void CycleTab(int delta)

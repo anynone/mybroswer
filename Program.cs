@@ -69,7 +69,20 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        var main = new MainForm();
+        // 会话恢复：上次异常终止（崩溃/被杀，无 CleanExit 标记）时恢复全部页面；
+        // selftest 保持确定性环境，不参与会话恢复
+        List<string>? restoreUrls = null;
+        var restoreActive = 0;
+        if (!args.Contains("--selftest"))
+        {
+            var (restore, urls, active) = SessionStore.PeekStartup();
+            if (restore) { restoreUrls = urls; restoreActive = active; }
+        }
+        SessionStore.BeginRun(); // 立即写"运行中"状态，本次再崩溃即可被识别
+
+        var main = restoreUrls is { Count: > 0 }
+            ? new MainForm(null, restoreUrls, restoreActive)
+            : new MainForm();
         Track(main);
         main.Show(); // 无参 Application.Run 不自动显示窗体，需显式 Show
         Application.Run();
@@ -85,10 +98,15 @@ internal static class Program
     private static void Track(System.Windows.Forms.Form form)
     {
         _windows.Add(form);
+        SessionStore.Register((MainForm)form);
         form.FormClosed += (s, e) =>
         {
             _windows.Remove(form);
-            if (_windows.Count == 0) Application.ExitThread();
+            if (_windows.Count == 0)
+            {
+                SessionStore.MarkCleanExit(); // 用户主动关闭：下次正常启动
+                Application.ExitThread();
+            }
         };
     }
 
