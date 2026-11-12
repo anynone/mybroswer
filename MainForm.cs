@@ -649,6 +649,10 @@ internal sealed class MainForm : Form
 
     internal void UiAddTab(string? url, bool select = true) => Ui(() => AddTab(url, select));
 
+    /// <summary>该浏览器控件是否为本窗口托管的标签（CEF 原生弹窗不是）。</summary>
+    internal bool IsOurTab(IWebBrowser browser) =>
+        _tabs.Any(t => ReferenceEquals(t.Browser, browser));
+
     /// <summary>页面 window.close() 的接管：按浏览器控件找到所属标签走正常关闭路径。</summary>
     internal void UiCloseBrowserTab(IWebBrowser browser) => Ui(() =>
     {

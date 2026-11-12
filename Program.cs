@@ -9,6 +9,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        RiLog.Info($"[app] RiBrowser 启动 pid={Environment.ProcessId}");
         PrivacySettings.Current = PrivacySettings.Load();
         UserScripts.Reload();
         AdBlocker.Initialize();
@@ -41,6 +42,10 @@ internal static class Program
         // 隐私防护：关闭站点隔离（跨站 iframe 与主框架共享渲染进程，
         // 使进程级时区/语言覆盖直达全部 frame，参考 Android Chrome 默认行为）
         settings.CefCommandLineArgs.Add("disable-site-isolation-trials", "1");
+
+        // 测试辅助（--no-popup-block）：关闭 Chromium 弹窗拦截器，CDP 无手势也能触发弹窗流程
+        if (Environment.GetCommandLineArgs().Contains("--no-popup-block"))
+            settings.CefCommandLineArgs.Add("disable-popup-blocking", "1");
 
         // 远程调试端口（--debug-port=9222）：CDP 驱动，用于自动化验证
         var dbg = Environment.GetCommandLineArgs()

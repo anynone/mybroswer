@@ -15,13 +15,17 @@ internal static class RiLog
         {
             lock (Lock)
             {
-                if (!File.Exists(LogPath)) Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-                var size = new FileInfo(LogPath).Length;
-                if (size > 2_000_000)
+                var dir = Path.GetDirectoryName(LogPath)!;
+                if (!File.Exists(LogPath))
                 {
-                    // 截断：保留后 1MB
-                    var lines = File.ReadAllLines(LogPath);
-                    File.WriteAllLines(LogPath, lines[^5000..]);
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllText(LogPath, $"{DateTime.Now:MM-dd HH:mm:ss.fff} {msg}\r\n");
+                    return;
+                }
+                if (new FileInfo(LogPath).Length > 2_000_000)
+                {
+                    // 截断：保留后 5000 行
+                    File.WriteAllLines(LogPath, File.ReadAllLines(LogPath)[^5000..]);
                 }
                 File.AppendAllText(LogPath, $"{DateTime.Now:MM-dd HH:mm:ss.fff} {msg}\r\n");
             }

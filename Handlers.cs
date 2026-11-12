@@ -173,10 +173,16 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
 
     public bool DoClose(IWebBrowser chromiumWebBrowser, IBrowser browser)
     {
-        // 页面 window.close()（登录/SSO 完成后的自关很常见）：
-        // 之前返回 false 交由 CEF 销毁 → 标签成僵尸（控件没了标签还在），
-        // 关闭链路失控时甚至连锁退出浏览器。改为接管：走正常关标签路径。
-        RiLog.Info($"[life] DoClose（页面请求关闭）url={chromiumWebBrowser.Address}");
+        // 页面 window.close()：我们托管的标签走正常关标签路径（防僵尸标签）；
+        // CEF 原生弹窗（OAuth 登录窗）用默认关闭，window.close() 才能关掉它。
+        RiLog.Info($"[life] DoClose url={chromiumWebBrowser.Address}");
+        return _form.IsOurTab(chromiumWebBrowser)
+            ? CancelAndRouteToTab(chromiumWebBrowser)
+            : false;
+    }
+
+    private bool CancelAndRouteToTab(IWebBrowser chromiumWebBrowser)
+    {
         _form.UiCloseBrowserTab(chromiumWebBrowser);
         return true; // 取消 CEF 默认销毁，由 CloseTab 统一处理
     }
@@ -188,15 +194,30 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings browserSettings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
-        RiLog.Info($"[life] OnBeforePopup disp={targetDisposition} url={targetUrl}");
-        // 空地址弹窗（window.open('') 探测/占位窗，如隐私分析站的 10×10 探测窗）：
-        // 按"弹窗已拦截"静默取消——window.open 返回 null，站点会走"已拦截"分支；
-        // 之前把它开成新标签页还抢焦点，表现为"点击后跳到 about:blank"
-        if (string.IsNullOrWhiteSpace(targetUrl) ||
-            targetUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase))
+        var blank = string.IsNullOrWhiteSpace(targetUrl) ||
+            targetUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
+        var w = popupFeatures?.Width ?? 0;
+        var h = popupFeatures?.Height ?? 0;
+        var sized = w >= 120 && h >= 120; // 正常窗口尺寸（OAuth 登录窗 ~480×620）
+        RiLog.Info($"[life] OnBeforePopup disp={targetDisposition} size={w}x{h} url={targetUrl}");
+
+        // 尺寸明确的真弹窗（OAuth/SSO 登录流：先弹 about:blank 再导航，或带尺寸开 URL）：
+        // 必须交给 CEF 创建原生弹窗——window.open 才返回真实窗口，登录页才有
+        // opener/postMessage 通道，登录完成后 window.close() 才能自关。
+        // 之前一律取消/转标签 → 登录站报 "There was an error logging you in"。
+        if (!blank && sized && targetDisposition == WindowOpenDisposition.NewPopup)
+            return false;
+        if (blank && sized)
+            return false;
+
+        // 小尺寸探测窗（如隐私分析站的 10×10 探测）与空地址无尺寸占位：按
+        // "弹窗已拦截"静默取消——window.open 返回 null，站点走"已拦截"分支
+        if (blank)
             return true;
+
+        // 其余（target=_blank 等）：取消默认弹窗，改为新标签页打开
         _form.UiAddTab(targetUrl);
-        return true; // 取消默认弹窗，改为新标签页
+        return true;
     }
 }
 
