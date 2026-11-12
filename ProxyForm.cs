@@ -327,13 +327,16 @@ internal sealed class ProxyForm : Form
             _password.SetBounds(340, 26, 146, 24);
         }
 
-        // TLS 区（ss 不用 TLS）
+        // TLS 区（ss 不用 TLS）。Tag 记录"意图可见性"：构造期窗体未显示时
+        // Control.Visible 沿父链恒为 false，LayoutGroups 不能依赖它计算高度
+        _tlsGroup.Tag = !ss;
         _tlsGroup.Visible = !ss;
         _tlsFields.Visible = _tls.Checked;
         _realityRow.Visible = p == "vless" && _tls.Checked;
         _tlsGroup.Height = !_tls.Checked ? 48 : (p == "vless" ? 172 : 138);
 
         // 传输区
+        _transportGroup.Tag = p is "vmess" or "vless";
         _transportGroup.Visible = p is "vmess" or "vless";
         _wsFields.Visible = _s.SbTransport == "ws";
         _transportGroup.Height = _s.SbTransport == "ws" ? 86 : 52;
@@ -341,13 +344,16 @@ internal sealed class ProxyForm : Form
         LayoutGroups();
     }
 
-    /// <summary>分组纵向紧凑排布（高度随可见性变化）。</summary>
+    /// <summary>分组纵向紧凑排布（高度随可见性变化）。
+    /// 可见性判定用 Tag 记录的意图值：构造期窗体未显示时 Control.Visible
+    /// 沿父链恒为 false，直接读 Visible 会把窗口高度缩到下限导致内容截断。</summary>
     private void LayoutGroups()
     {
         var y = 10;
         foreach (Control c in Controls)
         {
-            if (c is GroupBox g && g.Visible)
+            // 恒显分组未设 Tag（null 视为可见），动态分组由 UpdateVisibility 写入
+            if (c is GroupBox g && ((bool?)g.Tag ?? true))
             {
                 g.Location = new Point(12, y);
                 y += g.Height + 6;
@@ -359,7 +365,6 @@ internal sealed class ProxyForm : Form
         _state.Location = new Point(16, y + 40);
         _state.MaximumSize = new Size(504, 0);
         _note.Location = new Point(18, y + 76);
-        // 说明跟随内容排布；超高时交给 AutoScroll
         // 随内容伸缩（可增可减）：协议字段增减时不留大片空白，也避免切换抖动过大
         ClientSize = new Size(ClientSize.Width, Math.Max(430, y + 100));
     }
