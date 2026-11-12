@@ -176,12 +176,13 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         // CEF 线程回调绝不能让异常逃逸进原生层（未处理即进程崩溃 0xe0434352）
         try
         {
-            RiLog.Info($"[life] DoClose url={chromiumWebBrowser.Address}");
-            // 页面 window.close()：我们托管的标签走正常关标签路径（防僵尸标签）；
-            // CEF 原生弹窗（OAuth 登录窗）用默认关闭，window.close() 才能关掉它。
-            return _form.IsOurTab(chromiumWebBrowser)
-                ? CancelAndRouteToTab(chromiumWebBrowser)
-                : false;
+            // Chrome 语义：脚本不能关闭非脚本打开的标签——用户开的标签 window.close() 无效。
+            // （claude.ai/login 登录跳转时就会自关，若照办且是最后一个标签 → 整个浏览器退出）
+            // 我们托管的标签：取消关闭（忽略）；CEF 原生弹窗（window.open 打开的）：允许自关。
+            var isOurTab = _form.IsOurTab(chromiumWebBrowser);
+            RiLog.Info($"[life] DoClose url={chromiumWebBrowser.Address} ourTab={isOurTab}" +
+                (isOurTab ? "（忽略：脚本不可关用户标签）" : "（原生弹窗，允许关闭）"));
+            return !isOurTab; // ourTab → true（取消）；原生弹窗 → false（默认关闭）
         }
         catch (Exception ex)
         {
@@ -190,11 +191,6 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         }
     }
 
-    private bool CancelAndRouteToTab(IWebBrowser chromiumWebBrowser)
-    {
-        _form.UiCloseBrowserTab(chromiumWebBrowser);
-        return true; // 取消 CEF 默认销毁，由 CloseTab 统一处理
-    }
 
     public void OnBeforeClose(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
 
