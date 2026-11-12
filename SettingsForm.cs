@@ -40,6 +40,15 @@ internal sealed class SettingsForm : Form
     private readonly Panel _manualRows = new();
     private readonly Panel _sbRow = new();
 
+    // ---- Clash 接管 ----
+    private readonly TextBox _clashPort = new() { PlaceholderText = "端口" };
+    private readonly TextBox _clashApi = new() { PlaceholderText = "http://127.0.0.1:9097" };
+    private readonly TextBox _clashSecret = new() { PlaceholderText = "控制器密钥（无则留空）", UseSystemPasswordChar = true };
+    private readonly TextBox _clashProbe = new() { PlaceholderText = "http://内网地址/探测路径" };
+    private readonly TextBox _clashSub = new() { PlaceholderText = "https://…（订阅链接，自管内核用）" };
+    private readonly CheckBox _clashGate = new() { Text = "启动门禁：连上内网才放行浏览", AutoSize = true };
+    private readonly Panel _clashRows = new();
+
     public SettingsForm(PrivacySettings settings, Action<PrivacySettings>? onChanged = null)
     {
         _s = settings;
@@ -50,8 +59,11 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 760);
+        ClientSize = new Size(560, 844);
         AutoScroll = true;
+        // 布局按 96 DPI 设计；显示时框架按显示器实际 DPI 整体缩放
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9f);
 
         BuildIdentityGroup();
@@ -61,12 +73,18 @@ internal sealed class SettingsForm : Form
 
         var note = new Label
         {
-            Text = "所有修改即时保存并生效；浏览器语言/代理修改后重启生效。",
+            Text = "所有修改即时保存并生效；浏览器语言修改后重启生效，代理即时生效。",
             AutoSize = true,
-            Location = new Point(18, 730),
+            Location = new Point(18, 818),
             ForeColor = Muted,
         };
         Controls.Add(note);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        DpiUtil.ScaleTree(this, DeviceDpi / 96f); // 框架不缩子控件，见 DpiUtil 注释
     }
 
     // ---- 身份伪装 ----
@@ -221,15 +239,25 @@ internal sealed class SettingsForm : Form
     /// <summary>代理分组：模式 + 手动 SOCKS/HTTP；sing-box 详细参数在独立「代理设置」页配置。</summary>
     private void BuildProxyGroup()
     {
-        var g = new GroupBox { Text = "代理（修改后重启浏览器生效）", Bounds = new Rectangle(12, 592, 536, 128) };
+        var g = new GroupBox { Text = "代理（修改即时生效）", Bounds = new Rectangle(12, 592, 536, 216) };
 
-        // 模式行
-        _proxyMode.Items.AddRange(new object[] { "直连（不使用代理）", "手动代理（SOCKS / HTTP）", "sing-box（内置内核，直连代理服务器）" });
-        _proxyMode.SelectedIndex = _s.ProxyMode switch { "manual" => 1, "singbox" => 2, _ => 0 };
+        // 模式行（sing-box 已下线：仅旧配置仍在用该模式时显示为第 4 项，方便查看/迁移）
+        _proxyMode.Items.AddRange(new object[]
+        {
+            "直连（不使用代理）",
+            "手动代理（SOCKS / HTTP）",
+            "Clash（接管本机内核，推荐）",
+        });
+        if (_s.ProxyMode == "singbox")
+            _proxyMode.Items.Add("sing-box（已下线，建议迁移 Clash）");
+        _proxyMode.SelectedIndex = _s.ProxyMode switch { "manual" => 1, "clash" => 2, "singbox" => 3, _ => 0 };
         _proxyMode.SetBounds(76, 24, 240, 24);
         _proxyMode.SelectedIndexChanged += (s, e) =>
         {
-            _s.ProxyMode = _proxyMode.SelectedIndex switch { 1 => "manual", 2 => "singbox", _ => "off" };
+            _s.ProxyMode = _proxyMode.SelectedIndex switch
+            {
+                1 => "manual", 2 => "clash", 3 => "singbox", _ => "off",
+            };
             UpdateProxyVisibility();
             Changed();
         };
@@ -273,7 +301,37 @@ internal sealed class SettingsForm : Form
         _sbRow.SetBounds(0, 34, 536, 60);
         _sbRow.Controls.AddRange(new Control[] { sbL, _sbSummary, _sbOpen });
 
-        g.Controls.AddRange(new Control[] { modeLabel, _proxyMode, _kernelState, _manualRows, _sbRow });
+        // Clash 接管四行：端口/控制器/密钥/探测地址 + 启动门禁
+        _clashPort.Text = _s.ClashMixedPort.ToString();
+        _clashPort.TextChanged += (s, e) => { if (int.TryParse(_clashPort.Text.Trim(), out var p) && p is > 0 and < 65536) _s.ClashMixedPort = p; Changed(); };
+        _clashApi.Text = _s.ClashApiBase;
+        _clashApi.TextChanged += (s, e) => { _s.ClashApiBase = _clashApi.Text.Trim(); Changed(); };
+        _clashSecret.Text = _s.ClashApiSecret;
+        _clashSecret.TextChanged += (s, e) => { _s.ClashApiSecret = _clashSecret.Text.Trim(); Changed(); };
+        _clashProbe.Text = _s.ClashProbeUrl;
+        _clashProbe.TextChanged += (s, e) => { _s.ClashProbeUrl = _clashProbe.Text.Trim(); Changed(); };
+        _clashGate.Checked = _s.ClashGateOnStartup;
+        _clashGate.CheckedChanged += (s, e) => { _s.ClashGateOnStartup = _clashGate.Checked; Changed(); };
+        var cL1 = new Label { Text = "混合端口 / 控制器", AutoSize = true, Location = new Point(16, 32) };
+        _clashPort.SetBounds(140, 28, 60, 24);
+        _clashApi.SetBounds(210, 28, 246, 24);
+        var cL2 = new Label { Text = "密钥", AutoSize = true, Location = new Point(16, 62) };
+        _clashSecret.SetBounds(140, 58, 316, 24);
+        var cL3 = new Label { Text = "内网探测地址", AutoSize = true, Location = new Point(16, 92) };
+        _clashProbe.SetBounds(140, 88, 316, 24);
+        _clashSub.Text = _s.ClashSubUrl;
+        _clashSub.TextChanged += (s, e) => { _s.ClashSubUrl = _clashSub.Text.Trim(); Changed(); };
+        var cL4 = new Label { Text = "订阅链接（选填）", AutoSize = true, Location = new Point(16, 122) };
+        _clashSub.SetBounds(140, 118, 316, 24);
+        _clashGate.Location = new Point(16, 150);
+        _clashRows.SetBounds(0, 34, 536, 178);
+        _clashRows.Controls.AddRange(new Control[]
+        {
+            cL1, _clashPort, _clashApi, cL2, _clashSecret, cL3, _clashProbe,
+            cL4, _clashSub, _clashGate,
+        });
+
+        g.Controls.AddRange(new Control[] { modeLabel, _proxyMode, _kernelState, _manualRows, _sbRow, _clashRows });
         UpdateProxyVisibility();
         Controls.Add(g);
     }
@@ -281,10 +339,12 @@ internal sealed class SettingsForm : Form
     private void UpdateProxyVisibility()
     {
         _manualRows.Visible = _s.ProxyMode == "manual";
+        _clashRows.Visible = _s.ProxyMode == "clash";
         _sbRow.Visible = _s.ProxyMode == "singbox";
-        _sbSummary.Text = string.IsNullOrWhiteSpace(_s.SbServer)
-            ? "未配置（点右侧按钮设置服务器）"
-            : $"{_s.SbProto} → {_s.SbServer}:{_s.SbPort} → 本地 {_s.SbLocalPort}";
+        _sbSummary.Text = _s.ProxyMode != "singbox" ? "" :
+            string.IsNullOrWhiteSpace(_s.SbServer)
+                ? "已下线模式：未配置服务器，建议切换到 Clash"
+                : $"已下线模式（参数仍生效）：{_s.SbProto} → {_s.SbServer}:{_s.SbPort} → 本地 {_s.SbLocalPort}";
     }
 
 

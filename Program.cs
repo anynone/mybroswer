@@ -10,12 +10,47 @@ internal static class Program
     private static void Main()
     {
         RiLog.Info($"[app] RiBrowser 启动 pid={Environment.ProcessId}");
+        // WinForms 初始化必须先于任何窗体（含 Clash 门禁窗），否则
+        // SetCompatibleTextRenderingDefault 在首个窗口后调用会直接崩溃
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         PrivacySettings.Current = PrivacySettings.Load();
         UserScripts.Reload();
         AdBlocker.Initialize();
         Console.WriteLine("[adblock] init: enabled=" + AdBlocker.Enabled);
         try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "ri-injector.js"), UserScripts.BuildInjector()); } catch { }
         var privacy = PrivacySettings.Current;
+
+        // --clashselftest：自管 mihomo 内核端到端自检（本地 profile 当订阅 → 内核 →
+        // 控制器/订阅节点/延迟），不进 UI；stdin/stdout 供脚本捕获
+        if (Environment.GetCommandLineArgs().Contains("--clashselftest"))
+        {
+            ClashSelfTest.Run();
+            return;
+        }
+
+        // clash 模式一律内置 mihomo 内核（不依赖本机 Clash GUI；零节点时带"直连"
+        // 占位常驻，控制台/状态链路始终可用），先拉起再进门禁
+        if (privacy.ProxyMode == "clash")
+        {
+            try { ClashCoreManager.Start(privacy); }
+            catch (Exception ex)
+            {
+                RiLog.Error("ClashSelfCore", ex);
+                Console.WriteLine("[mihomo] " + ex.Message); // 门禁会给出可见的失败出口
+            }
+        }
+
+        // Clash 启动门禁：混合端口 → 控制器 → 内网探测都过了才放行浏览；
+        // 「仍要进入」以网络锁定态打开（MainForm 禁止全部网页访问直至代理就绪）
+        var gateResult = GateResult.Passed;
+        if (!Environment.GetCommandLineArgs().Contains("--selftest")
+            && privacy.ProxyMode == "clash" && privacy.ClashGateOnStartup)
+        {
+            gateResult = ClashGate.Run(privacy);
+            if (gateResult == GateResult.Aborted) return;
+        }
 
         var settings = new CefSettings
         {
@@ -57,14 +92,11 @@ internal static class Program
             settings.CefCommandLineArgs.Add("lang", privacy.BrowserLanguage);
 
         // 代理：manual 直连用户的 SOCKS/HTTP 端口；singbox 经内置 sing-box 内核中转。
-        // CEF 的 proxy-server 只在初始化时生效 → 修改配置需重启浏览器。
-        if (RiBrowser.Privacy.ProxyManager.CefProxyServer(privacy) is { } proxyServer)
-        {
-            settings.CefCommandLineArgs.Add("proxy-server", proxyServer);
-            Console.WriteLine("[proxy] CEF proxy-server = " + proxyServer);
-        }
-
+        // 经 CEF 'proxy' preference 下发（启动即设一次，此后修改即时生效）。
+        // 不能走 --proxy-server 启动参数：命令行设定的 preference 之后无法再被修改
+        // （CefSharp 文档明示 + 实测）。
         Cef.Initialize(settings);
+        ProxyManager.ApplyCefProxyAsync(privacy).GetAwaiter().GetResult();
 
         // 广告拦截引擎自测（--adtest [URL]）：不启动 UI，直接对样例 URL 跑匹配引擎
         var args = Environment.GetCommandLineArgs();
@@ -115,10 +147,6 @@ internal static class Program
             RiLog.Error("UI.ThreadException", e.Exception);
         };
 
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-
         // 会话恢复：上次异常终止（崩溃/被杀，无 CleanExit 标记）时恢复全部页面；
         // selftest 保持确定性环境，不参与会话恢复
         List<string>? restoreUrls = null;
@@ -131,8 +159,8 @@ internal static class Program
         SessionStore.BeginRun(); // 立即写"运行中"状态，本次再崩溃即可被识别
 
         var main = restoreUrls is { Count: > 0 }
-            ? new MainForm(null, restoreUrls, restoreActive)
-            : new MainForm();
+            ? new MainForm(null, restoreUrls, restoreActive, gateResult == GateResult.Skipped)
+            : new MainForm(netLock: gateResult == GateResult.Skipped);
         Track(main);
         main.Show(); // 无参 Application.Run 不自动显示窗体，需显式 Show
         Application.Run();

@@ -19,11 +19,23 @@
     <PackageReference Include="CefSharp.WinForms.NETCore" Version="156.0.150" />
     <PackageReference Include="DotNetBrowser" Version="4.3.5" />
     <PackageReference Include="DotNetBrowser.WinForms" Version="4.3.5" />
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Privacy\Scripts\tz-shim.js" />
     <EmbeddedResource Include="Privacy\Scripts\fp-shim.js" />
+  </ItemGroup>
+
+  <!-- 预制 mihomo 内核（v1.19.34）+ geo 数据：随构建拷到输出 kernel\ 目录，
+       本机没有外部 Clash 时浏览器零下载离线自管（geo 文件缺失时内核会卡在
+       GitHub 下载上，内网环境必须一起预制）。运行时取用顺序：
+       预制 → %LocalAppData% 缓存 → GitHub 在线下载（见 ClashCoreManager）。 -->
+  <ItemGroup>
+    <None Include="kernel\mihomo.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="kernel\Country.mmdb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="kernel\geosite.dat" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="kernel\ASN.mmdb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

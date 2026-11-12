@@ -55,9 +55,10 @@ public sealed class PrivacySettings
     /// <summary>Canvas 扰动种子（同一配置指纹稳定，换种子即换指纹）</summary>
     public string FingerprintSeed { get; set; } = "";
 
-    // ==================== 代理（重启浏览器后生效） ====================
+    // ==================== 代理（即时生效） ====================
 
-    /// <summary>"off" 直连 / "manual" 手动 HTTP·SOCKS 代理 / "singbox" 内置 sing-box 内核</summary>
+    /// <summary>"off" 直连 / "manual" 手动 HTTP·SOCKS 代理 / "clash" 接管本机
+    /// mihomo 内核（Clash Verge 等） / "singbox" 内置 sing-box 内核（旧，逐步下线）</summary>
     public string ProxyMode { get; set; } = "off";
 
     /// <summary>manual 模式协议："socks5" / "http"</summary>
@@ -67,6 +68,35 @@ public sealed class PrivacySettings
     /// <summary>认证代理 Chromium 命令行不支持，仅预留（带认证请用 sing-box 模式）</summary>
     public string ProxyUser { get; set; } = "";
     public string ProxyPass { get; set; } = "";
+
+    // ---- Clash 接管（浏览器直连 mihomo 控制器：换节点/模式/测速/状态都在浏览器内） ----
+    /// <summary>mihomo REST 控制器地址（Clash Verge Rev 默认 127.0.0.1:9097）</summary>
+    public string ClashApiBase { get; set; } = "http://127.0.0.1:9097";
+    /// <summary>控制器 Bearer 密钥（Verge 设置里可查；本机无密钥则留空）</summary>
+    public string ClashApiSecret { get; set; } = "";
+    /// <summary>混合端口（socks+http 同端口，浏览器流量指向内置内核；
+    /// 默认 17897，避开本机 Clash GUI 惯用的 7897）</summary>
+    public int ClashMixedPort { get; set; } = 17897;
+    /// <summary>启动门禁的内网探测地址：经代理链路请求它，成功才放行浏览</summary>
+    public string ClashProbeUrl { get; set; } = "http://www.gstatic.com/generate_204";
+    /// <summary>启动门禁：开浏览器前先确认 Clash 就绪 + 内网可达（防首屏直连泄漏）</summary>
+    public bool ClashGateOnStartup { get; set; } = true;
+    /// <summary>Clash Verge 可执行文件路径（留空 = 自动探测常见安装位置）</summary>
+    public string ClashExePath { get; set; } = "";
+    /// <summary>订阅链接（proxy-providers 节点来源；接管 Verge 时由 Verge 管理）</summary>
+    public string ClashSubUrl { get; set; } = "";
+    /// <summary>手动节点配置（Clash YAML 的顶层 proxies + 可选 rules；公司直发
+    /// trojan 域名/端口/密钥等无订阅场景，与订阅可并存）</summary>
+    public string ClashManualYaml { get; set; } = "";
+    /// <summary>本机没有外部内核时浏览器自管 mihomo（自动下载内核、订阅生成配置）</summary>
+    public bool ClashSelfManage { get; set; } = true;
+    /// <summary>自管内核的 HTTP 控制器端口（默认 9099，避开 Verge 惯用的 9097）</summary>
+    public int ClashSelfControllerPort { get; set; } = 9099;
+    /// <summary>自管内核控制器密钥（首次启动自动生成）</summary>
+    public string ClashSelfSecret { get; set; } = "";
+    /// <summary>控制台面板语言："zh-CN" / "en-US"，空 = 跟随浏览器语言
+    ///（默认中文：浏览器的防指纹伪装语言 en-US 会被面板误当作用户语言）</summary>
+    public string ClashPanelLang { get; set; } = "zh-CN";
 
     /// <summary>sing-box 远端协议："shadowsocks" / "vmess" / "vless" / "trojan"</summary>
     public string SbProto { get; set; } = "shadowsocks";

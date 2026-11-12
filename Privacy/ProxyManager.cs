@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.Json;
+using CefSharp;
 
 namespace RiBrowser.Privacy;
 
@@ -13,7 +14,7 @@ namespace RiBrowser.Privacy;
 /// - singbox：托管 sing-box 内核子进程（首次自动从 GitHub 下载），把远端
 ///   shadowsocks / vmess / vless / trojan 服务器转换为本地混合端口（socks+http），
 ///   浏览器再连本地端口 —— 即"直接连接到 proxy 服务器"。
-/// 代理在启动时读取配置（CefSettings.ProxyServer 命令行），修改需重启浏览器。
+/// 代理修改经 CEF 'proxy' preference 即时生效（见 ApplyCefProxyAsync），无需重启浏览器。
 /// </summary>
 internal static class ProxyManager
 {
@@ -42,11 +43,36 @@ internal static class ProxyManager
         {
             case "manual" when ValidHost(s.ProxyHost) && s.ProxyPort is > 0 and < 65536:
                 return $"{(s.ProxyScheme == "http" ? "http" : "socks5")}://{s.ProxyHost}:{s.ProxyPort}";
+            case "clash" when s.ClashMixedPort is > 0 and < 65536:
+                // 接管本机 mihomo（Clash Verge 等）：流量指向混合端口，节点/规则由内核分流
+                return $"socks5://127.0.0.1:{s.ClashMixedPort}";
             case "singbox" when ValidHost(s.SbServer):
                 return $"socks5://127.0.0.1:{s.SbLocalPort}";
             default:
                 return null;
         }
+    }
+
+    /// <summary>启动 Clash Verge（已运行则由其单实例机制聚焦窗口）。路径优先用设置值，
+    /// 留空时探测常见安装位置；找不到返回 false。</summary>
+    public static bool LaunchClashVerge(PrivacySettings s)
+    {
+        var candidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(s.ClashExePath)) candidates.Add(s.ClashExePath.Trim());
+        var lm = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var lap = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        candidates.AddRange(new[]
+        {
+            Path.Combine(lm, "Clash Verge", "clash-verge.exe"),
+            Path.Combine(lm, "Clash Verge Rev", "Clash Verge.exe"),
+            Path.Combine(lap, "Programs", "clash-verge", "Clash Verge.exe"),
+        });
+        foreach (var p in candidates.Where(File.Exists).Distinct())
+        {
+            try { Process.Start(new ProcessStartInfo(p) { UseShellExecute = true }); return true; }
+            catch { /* 试下一个 */ }
+        }
+        return false;
     }
 
     private static bool ValidHost(string? h) =>
@@ -55,6 +81,30 @@ internal static class ProxyManager
     /// <summary>是否需要启动 sing-box 内核。</summary>
     public static bool NeedsCore(PrivacySettings s) =>
         s.ProxyMode == "singbox" && ValidHost(s.SbServer);
+
+    /// <summary>把代理配置写入 CEF 的 'proxy' preference（Chromium 代理的运行时形态，
+    /// 设在全局 RequestContext 上，全部标签页即时生效，无需重启）。两条硬约束（CefSharp 156 实测）：
+    /// 1) 必须用 SetPreferenceAsync——同步版只允许在 CEF UI 线程调用，应用线程直接抛异常；
+    /// 2) 不能再走 --proxy-server 启动参数：命令行设定的 preference 之后无法被修改。
+    /// 直连或配置无效时 → mode=direct。</summary>
+    public static Task ApplyCefProxyAsync(PrivacySettings s) =>
+        CefProxyServer(s) is { } srv
+            ? ApplyPrefAsync(new Dictionary<string, object> { ["mode"] = "fixed_servers", ["server"] = srv })
+            : ApplyCefProxyDirectAsync();
+
+    /// <summary>强制直连（外部通道态：其他代理软件已打通网络，浏览器直连放行）。</summary>
+    public static Task ApplyCefProxyDirectAsync() =>
+        ApplyPrefAsync(new Dictionary<string, object> { ["mode"] = "direct" });
+
+    private static async Task ApplyPrefAsync(Dictionary<string, object> pref)
+    {
+        var ctx = Cef.GetGlobalRequestContext()
+            ?? throw new InvalidOperationException("CEF 全局 RequestContext 未初始化");
+        var resp = await ctx.SetPreferenceAsync("proxy", pref);
+        if (!resp.Success)
+            RiLog.Error("CefProxyPref", new InvalidOperationException(
+                $"SetPreference(proxy) 失败: {resp.ErrorMessage}"));
+    }
 
     // ==================== 内核管理 ====================
 
@@ -429,6 +479,17 @@ internal static class ProxyManager
             return ok
                 ? $"已连通 {s.ProxyScheme}://{s.ProxyHost}:{s.ProxyPort}"
                 : $"无法连接 {s.ProxyHost}:{s.ProxyPort}（地址/端口或防火墙）";
+        }
+
+        // clash 接管：混合端口 + 控制器两跳
+        if (s.ProxyMode == "clash")
+        {
+            var port = await Task.Run(() => TcpProbe("127.0.0.1", s.ClashMixedPort));
+            if (!port) return $"混合端口 127.0.0.1:{s.ClashMixedPort} 未监听（Clash Verge 是否在运行？）";
+            var ver = await ClashApi.GetVersionAsync(s);
+            return ver != null
+                ? $"链路就绪：mihomo {ver} · 127.0.0.1:{s.ClashMixedPort}"
+                : "混合端口在监听，但控制器 API 不可达（检查控制器地址/密钥；不影响浏览，仅浏览器内控制不可用）";
         }
 
         // singbox：本地入站 → 远端服务器 两跳

@@ -26,9 +26,17 @@ internal sealed class IconButton : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public float GlyphSize { get; set; } = 11f;
 
-    protected Color GlyphColor => Enabled
-        ? Color.FromArgb(0x3C, 0x40, 0x43)
-        : Color.FromArgb(0xBD, 0xC1, 0xC6);
+    /// <summary>字形着色（null = 默认灰）。Clash 状态点用它把盾牌染成绿/黄/红。</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color? GlyphTint
+    {
+        get => _tint;
+        set { if (_tint != value) { _tint = value; Invalidate(); } }
+    }
+    private Color? _tint;
+
+    protected Color GlyphColor => GlyphTint
+        ?? (Enabled ? Color.FromArgb(0x3C, 0x40, 0x43) : Color.FromArgb(0xBD, 0xC1, 0xC6));
 
     protected Color HoverColor => Color.FromArgb(0xE8, 0xEA, 0xED);
 

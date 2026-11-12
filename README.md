@@ -97,7 +97,9 @@ Handlers.cs     CEF 处理器：弹窗转标签、快捷键、下载
 
 ## 二次开发提示
 
-- 首页/搜索引擎：改 `MainForm.HomePage` 和 `SearchUrl` 常量。
-- 代理设置：`Program.cs` 中 `CefSettings.Proxy` 相关属性。
+- 首页/搜索引擎：改 `MainForm.HomeUrl` 和设置项 `HomePage`/`SearchEngine`。
+- 代理 / Clash 集成：`Privacy/ClashApi.cs`（mihomo 控制器客户端，命名管道/HTTP 双传输）、
+  `Privacy/ClashCoreManager.cs`（无外部内核时自管 mihomo）、`MainForm.ApplyProxyNow`
+  （设置即时生效入口）、`Privacy/ClashGate.cs`（启动门禁）。部署指引见 `docs/intranet-proxy-deploy.md`。
 - 拦截/修改请求：给每个 `ChromiumWebBrowser` 实现 `IRequestHandler`。
 - 鼠标手势、书签栏、历史记录等可在此基础上扩展；CEF 的 Cookie、历史、DevTools（右键 → 检查）等能力都已随内核可用。
