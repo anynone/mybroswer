@@ -52,6 +52,7 @@ internal sealed class ProxyForm : Form
     private readonly Button _download = new() { Text = "下载/更新内核" };
     private readonly Button _preview = new() { Text = "配置预览" };
     private readonly Label _state = new() { AutoSize = true, ForeColor = Muted };
+    private Label _note = new();
 
     private readonly GroupBox _authGroup = new() { Text = "认证" };
     private readonly GroupBox _tlsGroup = new() { Text = "TLS" };
@@ -82,14 +83,13 @@ internal sealed class ProxyForm : Form
         BuildAntiProbeGroup();
         BuildTools();
 
-        var note = new Label
+        _note = new Label
         {
             Text = "修改即时保存，重启浏览器后生效；浏览器流量经 sing-box 本地端口转发到代理服务器。",
             AutoSize = true,
-            Location = new Point(18, 646),
             ForeColor = Muted,
         };
-        Controls.Add(note);
+        Controls.Add(_note);
         UpdateVisibility();
     }
 
@@ -121,16 +121,17 @@ internal sealed class ProxyForm : Form
 
     private void BuildAuthGroup()
     {
-        _authGroup.Bounds = new Rectangle(12, 72, 536, 88);
+        _authGroup.Bounds = new Rectangle(12, 72, 536, 56);
 
+        // 单行布局：标签1 + 字段1（方法/UUID/密码）+ 标签2 + 字段2（ss 密码 / vless Flow）
         _l1.Location = new Point(16, 30);
-        _l2.Location = new Point(16, 62);
-        _method.SetBounds(76, 26, 150, 24);
-        _password.SetBounds(300, 26, 186, 24);
-        _uuid.SetBounds(76, 26, 410, 24);
+        _l2.Location = new Point(300, 30);
+        _method.SetBounds(86, 26, 200, 24);
+        _uuid.SetBounds(86, 26, 200, 24);
+        _password.SetBounds(86, 26, 200, 24);
         _flow.Items.AddRange(new object[] { "（无）", "xtls-rprx-vision" });
         _flow.SelectedIndex = _s.SbFlow == "xtls-rprx-vision" ? 1 : 0;
-        _flow.SetBounds(300, 58, 186, 24);
+        _flow.SetBounds(340, 26, 146, 24);
 
         _method.Text = _s.SbMethod;
         _method.TextChanged += (s, e) => { _s.SbMethod = _method.Text.Trim(); Changed(); };
@@ -152,32 +153,27 @@ internal sealed class ProxyForm : Form
         _tls.Checked = _s.SbTls;
         _tls.CheckedChanged += (s, e) => { _s.SbTls = _tls.Checked; Changed(); };
 
-        _tlsFields.SetBounds(0, 48, 536, 60);
-        var ls = new Label { Text = "SNI", AutoSize = true, Location = new Point(16, 14) };
-        _sni.SetBounds(50, 10, 160, 24);
-        var lf = new Label { Text = "指纹", AutoSize = true, Location = new Point(224, 14) };
-        _fp.Items.AddRange(new object[] { "（关闭）", "chrome", "firefox", "safari", "ios", "android", "random" });
-        _fp.SelectedIndex = _fp.Items.IndexOf(string.IsNullOrWhiteSpace(_s.SbFingerprint) ? "（关闭）" : _s.SbFingerprint);
-        if (_fp.SelectedIndex < 0) _fp.SelectedIndex = 0;
-        _fp.SelectedIndexChanged += (s, e) => { _s.SbFingerprint = _fp.SelectedIndex == 0 ? "" : (string)_fp.SelectedItem!; Changed(); };
-        var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(320, 14) };
-        _alpn.SetBounds(356, 10, 130, 24);
-        _alpn.Text = _s.SbAlpn;
-        _alpn.TextChanged += (s, e) => { _s.SbAlpn = _alpn.Text.Trim(); Changed(); };
-        _insecure.Location = new Point(50, 40);
-        _insecure.Checked = _s.SbInsecure;
-        _insecure.CheckedChanged += (s, e) => { _s.SbInsecure = _insecure.Checked; Changed(); };
-        _tlsFields.Controls.AddRange(new Control[] { ls, _sni, lf, _fp, la, _alpn, _insecure });
+        _tlsFields.SetBounds(0, 48, 536, 76);
+        var ls = new Label { Text = "SNI", AutoSize = true, Location = new Point(16, 34) };
+        _sni.SetBounds(52, 30, 170, 24);
+        var lf = new Label { Text = "指纹", AutoSize = true, Location = new Point(240, 34) };
+        _fp.SetBounds(278, 30, 110, 24);
+        var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(404, 34) };
+        _alpn.SetBounds(440, 30, 66, 24);
+        _sni.PlaceholderText = "空 = 用服务器地址";
+        _insecure.Location = new Point(16, 4);
+        _tlsFields.Controls.AddRange(new Control[] { _insecure, ls, _sni, lf, _fp, la, _alpn });
 
-        _realityRow.SetBounds(0, 108, 536, 30);
-        var lr = new Label { Text = "Reality", AutoSize = true, Location = new Point(16, 8) };
-        _realityKey.SetBounds(70, 4, 210, 24);
-        _realitySid.SetBounds(288, 4, 98, 24);
+        _realityRow.SetBounds(0, 126, 536, 30);
+        var lr = new Label { Text = "Reality 公钥", AutoSize = true, Location = new Point(16, 8) };
+        _realityKey.SetBounds(90, 4, 240, 24);
+        var lsid = new Label { Text = "短 ID", AutoSize = true, Location = new Point(344, 8) };
+        _realitySid.SetBounds(382, 4, 124, 24);
         _realityKey.Text = _s.SbRealityKey;
         _realityKey.TextChanged += (s, e) => { _s.SbRealityKey = _realityKey.Text.Trim(); Changed(); };
         _realitySid.Text = _s.SbRealitySid;
         _realitySid.TextChanged += (s, e) => { _s.SbRealitySid = _realitySid.Text.Trim(); Changed(); };
-        _realityRow.Controls.AddRange(new Control[] { lr, _realityKey, _realitySid });
+        _realityRow.Controls.AddRange(new Control[] { lr, _realityKey, lsid, _realitySid });
 
         _tlsGroup.Controls.AddRange(new Control[] { _tls, _tlsFields, _realityRow });
         Controls.Add(_tlsGroup);
@@ -185,14 +181,13 @@ internal sealed class ProxyForm : Form
 
     private void BuildTransportGroup()
     {
-        _transportGroup.Bounds = new Rectangle(12, 312, 536, 86);
-        var lt = new Label { Text = "类型", AutoSize = true, Location = new Point(16, 26) };
+        _transportGroup.Bounds = new Rectangle(12, 312, 536, 52);
+        var lt = new Label { Text = "类型", AutoSize = true, Location = new Point(16, 28) };
         _transport.Items.AddRange(new object[] { "tcp", "ws" });
         _transport.SelectedIndex = _s.SbTransport == "ws" ? 1 : 0;
         _transport.SelectedIndexChanged += (s, e) => { _s.SbTransport = _transport.SelectedIndex == 1 ? "ws" : "tcp"; Changed(); };
-        _transport.SetBounds(56, 22, 70, 24);
+        _transport.SetBounds(56, 24, 70, 24);
 
-        _wsFields.SetBounds(0, 52, 536, 30);
         var lp = new Label { Text = "路径", AutoSize = true, Location = new Point(16, 8) };
         _wsPath.SetBounds(50, 4, 150, 24);
         var lh = new Label { Text = "Host", AutoSize = true, Location = new Point(216, 8) };
@@ -201,6 +196,7 @@ internal sealed class ProxyForm : Form
         _wsPath.TextChanged += (s, e) => { _s.SbWsPath = _wsPath.Text.Trim(); Changed(); };
         _wsHost.Text = _s.SbWsHost;
         _wsHost.TextChanged += (s, e) => { _s.SbWsHost = _wsHost.Text.Trim(); Changed(); };
+        _wsFields.SetBounds(0, 48, 536, 30);
         _wsFields.Controls.AddRange(new Control[] { lp, _wsPath, lh, _wsHost });
 
         _transportGroup.Controls.AddRange(new Control[] { lt, _transport, _wsFields });
@@ -221,7 +217,7 @@ internal sealed class ProxyForm : Form
     /// <summary>防探测（内网安全）：DNS 防泄露 + DoH 服务器。</summary>
     private void BuildAntiProbeGroup()
     {
-        var g = new GroupBox { Text = "防探测（内网安全）", Bounds = new Rectangle(12, 462, 536, 92) };
+        var g = new GroupBox { Text = "防探测（内网安全）", Bounds = new Rectangle(12, 462, 536, 102) };
 
         _dnsCheck.Location = new Point(16, 24);
         _dnsCheck.Checked = _s.SbDnsProtect;
@@ -230,11 +226,12 @@ internal sealed class ProxyForm : Form
         {
             Text = "域名经加密隧道 DoH 解析，不向运营商 DNS 泄露访问目标；内网私有域名需公司 DNS 时才关闭。",
             AutoSize = true,
+            MaximumSize = new Size(500, 0),
             ForeColor = Muted,
-            Location = new Point(34, 46),
+            Location = new Point(34, 44),
         };
-        var ld = new Label { Text = "DoH", AutoSize = true, Location = new Point(16, 68) };
-        _dnsServer.SetBounds(50, 64, 436, 24);
+        var ld = new Label { Text = "DoH", AutoSize = true, Location = new Point(16, 74) };
+        _dnsServer.SetBounds(80, 70, 406, 24);
         _dnsServer.Text = _s.SbDnsServer;
         _dnsServer.TextChanged += (s, e) => { _s.SbDnsServer = _dnsServer.Text.Trim(); Changed(); };
 
@@ -298,35 +295,34 @@ internal sealed class ProxyForm : Form
         var p = _s.SbProto;
         var ss = p == "shadowsocks";
 
-        // 认证区
-        _method.Visible = _password.Visible = ss;
-        _l1.Text = ss ? "加密/密码" : "";
-        _l1.Visible = _l2.Visible = true;
-        _uuid.Visible = !ss;
+        // 认证区：单行动态字段（字段位置在 BuildAuthGroup 固定，只切换可见性与标签）
+        _method.Visible = ss;
+        _uuid.Visible = p is "vmess" or "vless";
         _flow.Visible = p == "vless";
-        _l2.Text = ss ? "" : (p == "trojan" ? "密码" : "认证");
-        _password.SetBounds(300, 26, 186, 24);
+        _l1.Text = ss ? "加密方法" : (p == "trojan" ? "密码" : "UUID");
+        _l2.Text = ss ? "密码" : "Flow";
+        _l2.Visible = ss || p == "vless";
+        _password.Visible = ss; // trojan 的密码显示在字段1位置：
         if (p == "trojan")
         {
-            // trojan 只用密码：密码框占 UUID 位置
-            _uuid.Visible = false;
             _password.Visible = true;
-            _password.SetBounds(76, 26, 410, 24);
+            _password.SetBounds(86, 26, 200, 24);
         }
         else
         {
-            _password.SetBounds(300, 26, 186, 24);
+            _password.SetBounds(340, 26, 146, 24);
         }
 
         // TLS 区（ss 不用 TLS）
         _tlsGroup.Visible = !ss;
         _tlsFields.Visible = _tls.Checked;
         _realityRow.Visible = p == "vless" && _tls.Checked;
-        _tlsGroup.Height = !_tls.Checked ? 48 : (p == "vless" ? 140 : 106);
+        _tlsGroup.Height = !_tls.Checked ? 48 : (p == "vless" ? 172 : 138);
 
         // 传输区
         _transportGroup.Visible = p is "vmess" or "vless";
         _wsFields.Visible = _s.SbTransport == "ws";
+        _transportGroup.Height = _s.SbTransport == "ws" ? 86 : 52;
 
         LayoutGroups();
     }
@@ -347,6 +343,10 @@ internal sealed class ProxyForm : Form
         _download.Location = new Point(114, y + 4);
         _preview.Location = new Point(232, y + 4);
         _state.Location = new Point(16, y + 40);
+        _state.MaximumSize = new Size(504, 0);
+        _note.Location = new Point(18, y + 76);
+        // 说明跟随内容排布；超高时交给 AutoScroll
+        if (y + 100 > ClientSize.Height) ClientSize = new Size(ClientSize.Width, y + 100);
     }
 
     private void Changed()
