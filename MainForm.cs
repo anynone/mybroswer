@@ -71,6 +71,10 @@ internal sealed class MainForm : Form
     private bool _showBookmarkBar;
 
     private readonly List<BrowserTab> _tabs = new();
+    // _tabs 会被 CEF 线程（DoClose→IsOurTab）并发读取：增删必须加锁，
+    // 否则 List 边遍历边改抛异常，CEF 原生回调未处理 → 进程崩溃（0xe0434352）
+    private readonly object _tabsLock = new();
+    // _tabs 会被 CEF 线程（DoClose→IsOurTab）并发读取：增删必须加锁，
     private BrowserTab? _activeTab;
 
     public MainForm(string? initialUrl = null, List<string>? restoreUrls = null, int restoreActive = 0)
@@ -505,7 +509,7 @@ internal sealed class MainForm : Form
         // 隐私防护：浏览器就绪后下发 CDP 覆盖 + 上下文创建时注入垫片
         _privacy.Attach(tab);
 
-        _tabs.Add(tab);
+        lock (_tabsLock) _tabs.Add(tab);
         _tabFlow.Controls.Add(item);
         _tabFlow.Controls.SetChildIndex(_plusButton, _tabFlow.Controls.Count - 1); // 保持 ＋ 在末尾
         _content.Controls.Add(browser);
@@ -538,7 +542,7 @@ internal sealed class MainForm : Form
         // 记入"最近关闭"，供标签条下拉箭头重新打开
         ClosedTabs.Push(tab.TabItem.Title, tab.Browser.Address);
         _privacy.Detach(tab);
-        _tabs.RemoveAt(index);
+        lock (_tabsLock) _tabs.RemoveAt(index);
         _tabFlow.Controls.Remove(tab.TabItem);
         _content.Controls.Remove(tab.Browser);
         try { tab.Browser.Dispose(); }
@@ -650,8 +654,10 @@ internal sealed class MainForm : Form
     internal void UiAddTab(string? url, bool select = true) => Ui(() => AddTab(url, select));
 
     /// <summary>该浏览器控件是否为本窗口托管的标签（CEF 原生弹窗不是）。</summary>
-    internal bool IsOurTab(IWebBrowser browser) =>
-        _tabs.Any(t => ReferenceEquals(t.Browser, browser));
+    internal bool IsOurTab(IWebBrowser browser)
+    {
+        lock (_tabsLock) return _tabs.Any(t => ReferenceEquals(t.Browser, browser));
+    }
 
     /// <summary>页面 window.close() 的接管：按浏览器控件找到所属标签走正常关闭路径。</summary>
     internal void UiCloseBrowserTab(IWebBrowser browser) => Ui(() =>

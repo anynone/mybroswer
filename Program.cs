@@ -101,6 +101,20 @@ internal static class Program
             catch (Exception ex) { Console.WriteLine("[proxy] " + ex.Message); }
         }
 
+        // 全局未处理异常兜底：记录后尽量存活（此前 CEF 回调抛异常直接崩溃整个进程）
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            RiLog.Error("UnobservedTask", e.Exception);
+            e.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            RiLog.Error("AppDomain.Unhandled" + (e.IsTerminating ? "(fatal)" : ""),
+                e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString() ?? "?"));
+        System.Windows.Forms.Application.ThreadException += (s, e) =>
+        {
+            RiLog.Error("UI.ThreadException", e.Exception);
+        };
+
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

@@ -173,12 +173,21 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
 
     public bool DoClose(IWebBrowser chromiumWebBrowser, IBrowser browser)
     {
-        // 页面 window.close()：我们托管的标签走正常关标签路径（防僵尸标签）；
-        // CEF 原生弹窗（OAuth 登录窗）用默认关闭，window.close() 才能关掉它。
-        RiLog.Info($"[life] DoClose url={chromiumWebBrowser.Address}");
-        return _form.IsOurTab(chromiumWebBrowser)
-            ? CancelAndRouteToTab(chromiumWebBrowser)
-            : false;
+        // CEF 线程回调绝不能让异常逃逸进原生层（未处理即进程崩溃 0xe0434352）
+        try
+        {
+            RiLog.Info($"[life] DoClose url={chromiumWebBrowser.Address}");
+            // 页面 window.close()：我们托管的标签走正常关标签路径（防僵尸标签）；
+            // CEF 原生弹窗（OAuth 登录窗）用默认关闭，window.close() 才能关掉它。
+            return _form.IsOurTab(chromiumWebBrowser)
+                ? CancelAndRouteToTab(chromiumWebBrowser)
+                : false;
+        }
+        catch (Exception ex)
+        {
+            RiLog.Error("DoClose", ex);
+            return false;
+        }
     }
 
     private bool CancelAndRouteToTab(IWebBrowser chromiumWebBrowser)
@@ -194,6 +203,8 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings browserSettings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
+        try
+        {
         var blank = string.IsNullOrWhiteSpace(targetUrl) ||
             targetUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
         var w = popupFeatures?.Width ?? 0;
@@ -218,6 +229,12 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         // 其余（target=_blank 等）：取消默认弹窗，改为新标签页打开
         _form.UiAddTab(targetUrl);
         return true;
+        }
+        catch (Exception ex)
+        {
+            RiLog.Error("OnBeforePopup " + targetUrl, ex);
+            return true; // 出错按拦截处理，绝不让异常进原生层
+        }
     }
 }
 

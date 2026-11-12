@@ -9,6 +9,18 @@ internal static class RiLog
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RiBrowser", "rilog.txt");
     private static readonly object Lock = new();
 
+
+    public static void Error(string tag, Exception ex)
+    {
+        var msg = ex.Message.Replace("\r", " ").Replace("\n", " ");
+        Info($"[error] {tag}: {ex.GetType().Name} {msg}");
+        try
+        {
+            lock (Lock) File.AppendAllText(LogPath, ex.StackTrace + "\r\n");
+        }
+        catch { }
+    }
+
     public static void Info(string msg)
     {
         try
