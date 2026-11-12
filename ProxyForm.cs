@@ -42,7 +42,7 @@ internal sealed class ProxyForm : Form
 
     // 本地
     private readonly TextBox _local = new() { PlaceholderText = "本地混合端口" };
-    private readonly CheckBox _tun = new() { Text = "TUN 模式：虚拟网卡接管全系统流量（启动需管理员授权 UAC；局域网共享/打印机会一并走隧道）", AutoSize = true };
+    private readonly CheckBox _tun = new() { Text = "TUN 模式：虚拟网卡接管全系统流量（需 UAC；局域网也走隧道）", AutoSize = true };
 
     // 防探测
     private readonly CheckBox _dnsCheck = new() { Text = "DNS 防泄露（域名经加密隧道解析）", AutoSize = true };
@@ -360,7 +360,8 @@ internal sealed class ProxyForm : Form
         _state.MaximumSize = new Size(504, 0);
         _note.Location = new Point(18, y + 76);
         // 说明跟随内容排布；超高时交给 AutoScroll
-        if (y + 100 > ClientSize.Height) ClientSize = new Size(ClientSize.Width, y + 100);
+        // 随内容伸缩（可增可减）：协议字段增减时不留大片空白，也避免切换抖动过大
+        ClientSize = new Size(ClientSize.Width, Math.Max(430, y + 100));
     }
 
     private void Changed()
