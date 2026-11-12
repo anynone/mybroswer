@@ -139,12 +139,16 @@ internal static class ProxyManager
             };
             var alpn = s.SbAlpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (alpn.Length > 0) tls["alpn"] = alpn;
-            if (!string.IsNullOrWhiteSpace(s.SbFingerprint))
+            // uTLS 指纹：vless 默认 chrome（客户端 TLS 指纹与本浏览器 UA 一致，防被动指纹识别）
+            var fp = string.IsNullOrWhiteSpace(s.SbFingerprint) && s.SbProto == "vless"
+                ? "chrome"
+                : s.SbFingerprint;
+            if (!string.IsNullOrWhiteSpace(fp))
             {
                 tls["utls"] = new Dictionary<string, object>
                 {
                     ["enabled"] = true,
-                    ["fingerprint"] = s.SbFingerprint.Trim(),
+                    ["fingerprint"] = fp.Trim(),
                 };
             }
             if (s.SbProto == "vless" && !string.IsNullOrWhiteSpace(s.SbRealityKey))
@@ -179,9 +183,19 @@ internal static class ProxyManager
         return outbound;
     }
 
-    /// <summary>生成完整 config.json 内容（代理设置页预览 + 写盘共用）。</summary>
+    /// <summary>生成完整 config.json 内容（代理设置页预览 + 写盘共用）。
+    /// 防探测硬化：DNS 防泄露（DoH 经隧道，不泄露域名给运营商明文 DNS）、
+    /// 路由 auto_detect_interface（杜绝绕过隧道的直连泄漏）。</summary>
     public static string GenerateConfigJson(PrivacySettings s)
     {
+        var outbound = BuildOutbound(s);
+        var route = new Dictionary<string, object>
+        {
+            ["final"] = "proxy",
+            // 绑定默认网卡出站：防止 sing-box 在多网卡/多路由下意外泄漏直连
+            ["auto_detect_interface"] = true,
+        };
+
         var config = new Dictionary<string, object>
         {
             ["log"] = new Dictionary<string, object> { ["level"] = "warn", ["timestamp"] = true },
@@ -190,16 +204,48 @@ internal static class ProxyManager
                 new Dictionary<string, object>
                 {
                     ["type"] = "mixed", ["tag"] = "in",
+                    // 仅回环：局域网其他用户无法探测/盗用本机代理通道
                     ["listen"] = "127.0.0.1", ["listen_port"] = s.SbLocalPort,
                 },
             },
             ["outbounds"] = new object[]
             {
-                BuildOutbound(s),
+                outbound,
                 new Dictionary<string, object> { ["type"] = "direct", ["tag"] = "direct" },
             },
-            ["route"] = new Dictionary<string, object> { ["final"] = "proxy" },
+            ["route"] = route,
         };
+
+        // DNS 防泄露：域名经代理隧道加密解析（DoH/DoT），运营商只见加密流量；
+        // 关闭时回退 sing-box 默认（本机系统 DNS）。
+        // sing-box 1.12+ 新 DNS 格式：servers 为类型化对象（https/udp/tls）。
+        if (s.SbDnsProtect && !string.IsNullOrWhiteSpace(s.SbDnsServer))
+        {
+            var addr = s.SbDnsServer.Trim();
+            var (type, host) = addr.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                ? ("https", addr[8..])
+                : addr.StartsWith("tls://", StringComparison.OrdinalIgnoreCase)
+                    ? ("tls", addr[6..])
+                    : ("udp", addr);
+            host = host.Split('/')[0]; // 去路径（新格式默认 /dns-query）
+
+            config["dns"] = new Dictionary<string, object>
+            {
+                ["servers"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = type,
+                        ["tag"] = "dns-remote",
+                        ["server"] = host,
+                        ["detour"] = "proxy", // 查询走隧道，杜绝明文 DNS 泄露
+                    },
+                },
+                ["final"] = "dns-remote",
+                ["strategy"] = "prefer_ipv4",
+            };
+        }
+
         return JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
     }
 

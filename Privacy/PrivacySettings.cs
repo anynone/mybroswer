@@ -104,6 +104,13 @@ public sealed class PrivacySettings
     /// <summary>ws Host 头（CDN 场景；空 = 用服务器地址）</summary>
     public string SbWsHost { get; set; } = "";
 
+    // ---- 防探测（内网安全场景默认全开） ----
+    /// <summary>DNS 防泄露：域名经加密隧道用 DoH 解析，不发给运营商明文 DNS。
+    /// 注意：内网私有域名需要公司内部 DNS 时才关闭。</summary>
+    public bool SbDnsProtect { get; set; } = true;
+    /// <summary>DoH 服务器（IP 字面量地址，避免解析回环）</summary>
+    public string SbDnsServer { get; set; } = "https://1.1.1.1/dns-query";
+
     /// <summary>全局单例，Program.Main 启动时加载</summary>
     public static PrivacySettings Current { get; set; } = new();
 

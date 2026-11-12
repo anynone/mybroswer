@@ -43,6 +43,10 @@ internal sealed class ProxyForm : Form
     // 本地
     private readonly TextBox _local = new() { PlaceholderText = "本地混合端口" };
 
+    // 防探测
+    private readonly CheckBox _dnsCheck = new() { Text = "DNS 防泄露（域名经加密隧道解析）", AutoSize = true };
+    private readonly TextBox _dnsServer = new() { PlaceholderText = "DoH 服务器，如 https://1.1.1.1/dns-query" };
+
     // 工具
     private readonly Button _test = new() { Text = "测试连接" };
     private readonly Button _download = new() { Text = "下载/更新内核" };
@@ -66,7 +70,7 @@ internal sealed class ProxyForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 620);
+        ClientSize = new Size(560, 668);
         AutoScroll = true;
         Font = new Font("Segoe UI", 9f);
 
@@ -75,13 +79,14 @@ internal sealed class ProxyForm : Form
         BuildTlsGroup();
         BuildTransportGroup();
         BuildLocalGroup();
+        BuildAntiProbeGroup();
         BuildTools();
 
         var note = new Label
         {
             Text = "修改即时保存，重启浏览器后生效；浏览器流量经 sing-box 本地端口转发到代理服务器。",
             AutoSize = true,
-            Location = new Point(18, 588),
+            Location = new Point(18, 646),
             ForeColor = Muted,
         };
         Controls.Add(note);
@@ -93,7 +98,13 @@ internal sealed class ProxyForm : Form
         var g = new GroupBox { Text = "服务器", Bounds = new Rectangle(12, 10, 536, 56) };
         _proto.Items.AddRange(new object[] { "shadowsocks", "vmess", "vless", "trojan" });
         _proto.SelectedIndex = Math.Max(0, _proto.Items.IndexOf(_s.SbProto));
-        _proto.SelectedIndexChanged += (s, e) => { _s.SbProto = (string)_proto.SelectedItem!; Changed(); };
+        _proto.SelectedIndexChanged += (s, e) =>
+        {
+            _s.SbProto = (string)_proto.SelectedItem!;
+            // vless 默认 chrome 指纹：客户端 TLS 指纹与浏览器 UA 一致（防被动指纹识别）
+            if (_s.SbProto == "vless" && _fp.SelectedIndex == 0) { _fp.SelectedIndex = 1; _s.SbFingerprint = "chrome"; }
+            Changed();
+        };
         _server.Text = _s.SbServer;
         _server.TextChanged += (s, e) => { _s.SbServer = _server.Text.Trim(); Changed(); };
         _port.Text = _s.SbPort.ToString();
@@ -204,6 +215,30 @@ internal sealed class ProxyForm : Form
         _local.Text = _s.SbLocalPort.ToString();
         _local.TextChanged += (s, e) => { if (int.TryParse(_local.Text.Trim(), out var p) && p is > 0 and < 65536) _s.SbLocalPort = p; Changed(); };
         g.Controls.AddRange(new Control[] { l, _local });
+        Controls.Add(g);
+    }
+
+    /// <summary>防探测（内网安全）：DNS 防泄露 + DoH 服务器。</summary>
+    private void BuildAntiProbeGroup()
+    {
+        var g = new GroupBox { Text = "防探测（内网安全）", Bounds = new Rectangle(12, 462, 536, 92) };
+
+        _dnsCheck.Location = new Point(16, 24);
+        _dnsCheck.Checked = _s.SbDnsProtect;
+        _dnsCheck.CheckedChanged += (s, e) => { _s.SbDnsProtect = _dnsCheck.Checked; Changed(); };
+        var hint = new Label
+        {
+            Text = "域名经加密隧道 DoH 解析，不向运营商 DNS 泄露访问目标；内网私有域名需公司 DNS 时才关闭。",
+            AutoSize = true,
+            ForeColor = Muted,
+            Location = new Point(34, 46),
+        };
+        var ld = new Label { Text = "DoH", AutoSize = true, Location = new Point(16, 68) };
+        _dnsServer.SetBounds(50, 64, 436, 24);
+        _dnsServer.Text = _s.SbDnsServer;
+        _dnsServer.TextChanged += (s, e) => { _s.SbDnsServer = _dnsServer.Text.Trim(); Changed(); };
+
+        g.Controls.AddRange(new Control[] { _dnsCheck, hint, ld, _dnsServer });
         Controls.Add(g);
     }
 
