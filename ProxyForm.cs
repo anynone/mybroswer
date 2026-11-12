@@ -161,7 +161,7 @@ internal sealed class ProxyForm : Form
         _fp.SetBounds(250, 30, 100, 24);
         var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(366, 34) };
         _alpn.SetBounds(402, 30, 134, 24);
-        _sni.PlaceholderText = "空 = 用服务器地址";
+        _sni.PlaceholderText = "默认 = 服务器地址";
         _sni.Text = _s.SbSni;
         _sni.TextChanged += (s, e) => { _s.SbSni = _sni.Text.Trim(); Changed(); };
         _fp.Items.AddRange(new object[] { "（关闭）", "chrome", "firefox", "safari", "ios", "android", "random" });
