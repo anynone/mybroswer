@@ -161,7 +161,17 @@ internal sealed class ProxyForm : Form
         var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(404, 34) };
         _alpn.SetBounds(440, 30, 66, 24);
         _sni.PlaceholderText = "空 = 用服务器地址";
+        _sni.Text = _s.SbSni;
+        _sni.TextChanged += (s, e) => { _s.SbSni = _sni.Text.Trim(); Changed(); };
+        _fp.Items.AddRange(new object[] { "（关闭）", "chrome", "firefox", "safari", "ios", "android", "random" });
+        _fp.SelectedIndex = _fp.Items.IndexOf(string.IsNullOrWhiteSpace(_s.SbFingerprint) ? "（关闭）" : _s.SbFingerprint);
+        if (_fp.SelectedIndex < 0) _fp.SelectedIndex = 0;
+        _fp.SelectedIndexChanged += (s, e) => { _s.SbFingerprint = _fp.SelectedIndex == 0 ? "" : (string)_fp.SelectedItem!; Changed(); };
+        _alpn.Text = _s.SbAlpn;
+        _alpn.TextChanged += (s, e) => { _s.SbAlpn = _alpn.Text.Trim(); Changed(); };
         _insecure.Location = new Point(16, 4);
+        _insecure.Checked = _s.SbInsecure;
+        _insecure.CheckedChanged += (s, e) => { _s.SbInsecure = _insecure.Checked; Changed(); };
         _tlsFields.Controls.AddRange(new Control[] { _insecure, ls, _sni, lf, _fp, la, _alpn });
 
         _realityRow.SetBounds(0, 126, 536, 30);
