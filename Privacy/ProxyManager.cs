@@ -168,13 +168,16 @@ internal static class ProxyManager
         if (s.SbProto == "vless" && !string.IsNullOrWhiteSpace(s.SbFlow))
             outbound["flow"] = s.SbFlow.Trim();
 
-        // 传输层（vmess/vless：ws）
+        // 传输层（vmess/vless：ws）；路径归一化补前导 /（服务端按绝对路径匹配）
         if (s.SbProto is "vmess" or "vless" && s.SbTransport == "ws")
         {
+            var path = s.SbWsPath.Trim();
+            if (path.Length == 0) path = "/";
+            if (path[0] != '/') path = "/" + path;
             var ws = new Dictionary<string, object>
             {
                 ["type"] = "ws",
-                ["path"] = string.IsNullOrWhiteSpace(s.SbWsPath) ? "/" : s.SbWsPath.Trim(),
+                ["path"] = path,
             };
             if (!string.IsNullOrWhiteSpace(s.SbWsHost))
                 ws["headers"] = new Dictionary<string, object> { ["Host"] = s.SbWsHost.Trim() };
@@ -246,9 +249,10 @@ internal static class ProxyManager
         // DNS 防泄露：域名经代理隧道加密解析（DoH/DoT），运营商只见加密流量；
         // 关闭时回退 sing-box 默认（本机系统 DNS）。
         // sing-box 1.12+ 新 DNS 格式：servers 为类型化对象（https/udp/tls）。
-        if (s.SbDnsProtect && !string.IsNullOrWhiteSpace(s.SbDnsServer))
+        // DoH 地址被清空时回退默认，避免防泄露静默失效。
+        if (s.SbDnsProtect)
         {
-            var addr = s.SbDnsServer.Trim();
+            var addr = string.IsNullOrWhiteSpace(s.SbDnsServer) ? "https://1.1.1.1/dns-query" : s.SbDnsServer.Trim();
             var (type, host) = addr.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
                 ? ("https", addr[8..])
                 : addr.StartsWith("tls://", StringComparison.OrdinalIgnoreCase)

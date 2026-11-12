@@ -189,7 +189,13 @@ internal sealed class ProxyForm : Form
         var lsid = new Label { Text = "短 ID", AutoSize = true, Location = new Point(344, 8) };
         _realitySid.SetBounds(382, 4, 124, 24);
         _realityKey.Text = _s.SbRealityKey;
-        _realityKey.TextChanged += (s, e) => { _s.SbRealityKey = _realityKey.Text.Trim(); Changed(); };
+        _realityKey.TextChanged += (s, e) =>
+        {
+            _s.SbRealityKey = _realityKey.Text.Trim();
+            // Reality 依赖 TLS：填了公钥却未勾 TLS 会被生成器静默忽略，自动代勾
+            if (_s.SbRealityKey.Length > 0 && !_tls.Checked) { _tls.Checked = true; _s.SbTls = true; }
+            Changed();
+        };
         _realitySid.Text = _s.SbRealitySid;
         _realitySid.TextChanged += (s, e) => { _s.SbRealitySid = _realitySid.Text.Trim(); Changed(); };
         _realityRow.Controls.AddRange(new Control[] { lr, _realityKey, lsid, _realitySid });
