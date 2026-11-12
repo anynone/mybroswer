@@ -29,6 +29,7 @@ internal static class ProxyManager
     private static string ConfigPath => Path.Combine(Dir, "config.json");
 
     private static Process? _core;
+    private static bool _elevatedWatchdog; // TUN：sing-box 由提权看门狗托管，需经 stop 文件回收
 
     public static bool CoreRunning => _core is { HasExited: false };
 
@@ -298,8 +299,7 @@ internal static class ProxyManager
         }
 
         WriteConfig(s);
-        // TUN 模式需要创建虚拟网卡：必须以管理员权限启动（弹 UAC），
-        // 提权进程无法重定向输出——退出码判断成败
+        _elevatedWatchdog = s.SbTun;
         var psi = new ProcessStartInfo
         {
             FileName = ExePath,
@@ -308,8 +308,34 @@ internal static class ProxyManager
         };
         if (s.SbTun)
         {
-            psi.UseShellExecute = true;
-            psi.Verb = "runas"; // UAC 提权
+            // TUN 需要管理员权限创建虚拟网卡。不能直接 runas sing-box：
+            // 非提权的浏览器杀不掉提权进程，浏览器退出后会留下孤儿内核
+            // 持续劫持全系统路由。改为 runas 一个隐藏的 PowerShell 看门狗，
+            // 由它（管理员）启动 sing-box 并轮询：浏览器进程消失或 stop 标记
+            // 文件出现 → 杀 sing-box 退出。浏览器退出/崩溃都能自动回收，
+            // StopCore 只需写文件（无需权限）。
+            var stopFlag = Path.Combine(Dir, "stop.flag");
+            try { File.Delete(stopFlag); } catch { /* 上次残留 */ }
+            var script = string.Join("\n",
+                $"$pp = {Environment.ProcessId}",
+                $"$stop = '{stopFlag}'",
+                $"$core = Start-Process -FilePath '{ExePath}' -ArgumentList 'run','-c','{ConfigPath}' -WindowStyle Hidden -PassThru",
+                "while (-not $core.HasExited) {",
+                "  if (-not (Get-Process -Id $pp -ErrorAction SilentlyContinue) -or (Test-Path $stop)) {",
+                "    Stop-Process -Id $core.Id -Force; break",
+                "  }",
+                "  Start-Sleep -Milliseconds 1500",
+                "}",
+                "Remove-Item $stop -ErrorAction SilentlyContinue");
+            psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand "
+                    + Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)),
+                UseShellExecute = true,
+                Verb = "runas", // UAC 提权（看门狗与 sing-box 同为管理员）
+                WindowStyle = ProcessWindowStyle.Hidden, // 提权窗口不可见
+            };
         }
         else
         {
@@ -324,7 +350,7 @@ internal static class ProxyManager
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            throw new InvalidOperationException("TUN 模式需要管理员权限（已取消 UAC 授权）");
+            throw new InvalidOperationException("TUN 模式需要管理员权限（已取消 UAC 授权）。本次浏览器仍会指向未就绪的本地端口——请在 代理设置 改回直连/关闭 TUN 后重启浏览器");
         }
         if (_core == null) throw new InvalidOperationException("sing-box 启动失败");
 
@@ -351,12 +377,23 @@ internal static class ProxyManager
 
     public static void StopCore()
     {
-        try
+        if (_elevatedWatchdog)
         {
-            if (_core is { HasExited: false }) _core.Kill(entireProcessTree: true);
+            // 提权内核无法直接 Kill：写 stop 标记，看门狗轮询到后杀 sing-box
+            try { File.WriteAllText(Path.Combine(Dir, "stop.flag"), "stop"); }
+            catch { /* 盘只读等极端情况：看门狗在浏览器进程消失后仍会回收 */ }
+            for (var i = 0; i < 6 && _core is { HasExited: false }; i++) Thread.Sleep(500);
         }
-        catch { /* 退出中重复 Stop 忽略 */ }
+        else
+        {
+            try
+            {
+                if (_core is { HasExited: false }) _core.Kill(entireProcessTree: true);
+            }
+            catch { /* 退出中重复 Stop 忽略 */ }
+        }
         _core = null;
+        _elevatedWatchdog = false;
     }
 
     // ==================== 连通测试 ====================
