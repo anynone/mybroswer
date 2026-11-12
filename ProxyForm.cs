@@ -30,7 +30,7 @@ internal sealed class ProxyForm : Form
     private readonly CheckBox _tls = new() { Text = "启用 TLS", AutoSize = true };
     private readonly TextBox _sni = new() { PlaceholderText = "SNI（空 = 用服务器地址）" };
     private readonly ComboBox _fp = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _alpn = new() { PlaceholderText = "ALPN，如 h2,http/1.1" };
+    private readonly ComboBox _alpn = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly CheckBox _insecure = new() { Text = "允许不安全证书", AutoSize = true };
     private readonly TextBox _realityKey = new() { PlaceholderText = "Reality public key（填写即启用）" };
     private readonly TextBox _realitySid = new() { PlaceholderText = "short id" };
@@ -156,11 +156,11 @@ internal sealed class ProxyForm : Form
 
         _tlsFields.SetBounds(0, 48, 536, 76);
         var ls = new Label { Text = "SNI", AutoSize = true, Location = new Point(16, 34) };
-        _sni.SetBounds(52, 30, 170, 24);
-        var lf = new Label { Text = "指纹", AutoSize = true, Location = new Point(240, 34) };
-        _fp.SetBounds(278, 30, 110, 24);
-        var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(404, 34) };
-        _alpn.SetBounds(440, 30, 66, 24);
+        _sni.SetBounds(52, 30, 150, 24);
+        var lf = new Label { Text = "指纹", AutoSize = true, Location = new Point(216, 34) };
+        _fp.SetBounds(250, 30, 100, 24);
+        var la = new Label { Text = "ALPN", AutoSize = true, Location = new Point(366, 34) };
+        _alpn.SetBounds(402, 30, 134, 24);
         _sni.PlaceholderText = "空 = 用服务器地址";
         _sni.Text = _s.SbSni;
         _sni.TextChanged += (s, e) => { _s.SbSni = _sni.Text.Trim(); Changed(); };
@@ -168,8 +168,16 @@ internal sealed class ProxyForm : Form
         _fp.SelectedIndex = _fp.Items.IndexOf(string.IsNullOrWhiteSpace(_s.SbFingerprint) ? "（关闭）" : _s.SbFingerprint);
         if (_fp.SelectedIndex < 0) _fp.SelectedIndex = 0;
         _fp.SelectedIndexChanged += (s, e) => { _s.SbFingerprint = _fp.SelectedIndex == 0 ? "" : (string)_fp.SelectedItem!; Changed(); };
-        _alpn.Text = _s.SbAlpn;
-        _alpn.TextChanged += (s, e) => { _s.SbAlpn = _alpn.Text.Trim(); Changed(); };
+        // ALPN 下拉：常用组合；「（默认）」= 不下发 alpn（由协议/服务端协商）
+        _alpn.Items.AddRange(new object[] { "（默认）", "h2,http/1.1", "http/1.1", "h2", "h3", "h3,http/1.1" });
+        var alpnIdx = _alpn.Items.IndexOf(string.IsNullOrWhiteSpace(_s.SbAlpn) ? "（默认）" : _s.SbAlpn);
+        if (alpnIdx < 0 && !string.IsNullOrWhiteSpace(_s.SbAlpn))
+        {
+            _alpn.Items.Add(_s.SbAlpn); // 旧配置里的自定义值保留可选
+            alpnIdx = _alpn.Items.Count - 1;
+        }
+        _alpn.SelectedIndex = Math.Max(0, alpnIdx);
+        _alpn.SelectedIndexChanged += (s, e) => { _s.SbAlpn = _alpn.SelectedIndex == 0 ? "" : (string)_alpn.SelectedItem!; Changed(); };
         _insecure.Location = new Point(16, 4);
         _insecure.Checked = _s.SbInsecure;
         _insecure.CheckedChanged += (s, e) => { _s.SbInsecure = _insecure.Checked; Changed(); };
