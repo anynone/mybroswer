@@ -108,6 +108,10 @@ public sealed class PrivacySettings
     /// <summary>DNS 防泄露：域名经加密隧道用 DoH 解析，不发给运营商明文 DNS。
     /// 注意：内网私有域名需要公司内部 DNS 时才关闭。</summary>
     public bool SbDnsProtect { get; set; } = true;
+
+    /// <summary>TUN 模式：创建虚拟网卡接管全系统流量（不只浏览器）。
+    /// 需要管理员权限——启动内核时会弹 UAC 提权。默认关。</summary>
+    public bool SbTun { get; set; } = false;
     /// <summary>DoH 服务器（IP 字面量地址，避免解析回环）</summary>
     public string SbDnsServer { get; set; } = "https://1.1.1.1/dns-query";
 

@@ -60,6 +60,19 @@ internal static class Program
 
         // 广告拦截引擎自测（--adtest [URL]）：不启动 UI，直接对样例 URL 跑匹配引擎
         var args = Environment.GetCommandLineArgs();
+        // --genproxyconfig：导出当前代理配置到 singbox/config.json（校验/调试用）
+        if (args.Contains("--genproxyconfig"))
+        {
+            var cfg = RiBrowser.Privacy.ProxyManager.GenerateConfigJson(privacy);
+            var cfgDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RiBrowser", "singbox");
+            Directory.CreateDirectory(cfgDir);
+            File.WriteAllText(Path.Combine(cfgDir, "config.json"), cfg);
+            Console.WriteLine(cfg);
+            return;
+        }
+
         if (args.Contains("--adtest"))
         {
             RunAdTest();

@@ -42,6 +42,7 @@ internal sealed class ProxyForm : Form
 
     // 本地
     private readonly TextBox _local = new() { PlaceholderText = "本地混合端口" };
+    private readonly CheckBox _tun = new() { Text = "TUN 模式：虚拟网卡接管全系统流量（启动需管理员授权 UAC）", AutoSize = true };
 
     // 防探测
     private readonly CheckBox _dnsCheck = new() { Text = "DNS 防泄露（域名经加密隧道解析）", AutoSize = true };
@@ -215,12 +216,15 @@ internal sealed class ProxyForm : Form
 
     private void BuildLocalGroup()
     {
-        var g = new GroupBox { Text = "本地入站", Bounds = new Rectangle(12, 404, 536, 52) };
+        var g = new GroupBox { Text = "本地入站 / TUN", Bounds = new Rectangle(12, 404, 536, 88) };
         var l = new Label { Text = "混合端口（socks + http 同端口）", AutoSize = true, Location = new Point(16, 24) };
         _local.SetBounds(230, 20, 70, 24);
         _local.Text = _s.SbLocalPort.ToString();
         _local.TextChanged += (s, e) => { if (int.TryParse(_local.Text.Trim(), out var p) && p is > 0 and < 65536) _s.SbLocalPort = p; Changed(); };
-        g.Controls.AddRange(new Control[] { l, _local });
+        _tun.Location = new Point(16, 52);
+        _tun.Checked = _s.SbTun;
+        _tun.CheckedChanged += (s, e) => { _s.SbTun = _tun.Checked; Changed(); };
+        g.Controls.AddRange(new Control[] { l, _local, _tun });
         Controls.Add(g);
     }
 

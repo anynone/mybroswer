@@ -183,6 +183,34 @@ internal static class ProxyManager
         return outbound;
     }
 
+    /// <summary>入站列表：浏览器走的本地混合端口（仅回环）；
+    /// TUN 模式追加虚拟网卡入站，接管全系统流量（auto_route + 严格路由防绕过）。</summary>
+    private static object[] Inbounds(PrivacySettings s)
+    {
+        var list = new List<object>
+        {
+            new Dictionary<string, object>
+            {
+                ["type"] = "mixed", ["tag"] = "in",
+                // 仅回环：局域网其他用户无法探测/盗用本机代理通道
+                ["listen"] = "127.0.0.1", ["listen_port"] = s.SbLocalPort,
+            },
+        };
+        if (s.SbTun)
+        {
+            list.Add(new Dictionary<string, object>
+            {
+                ["type"] = "tun", ["tag"] = "tun-in",
+                ["address"] = new[] { "172.19.0.1/30" },
+                ["mtu"] = 9000,
+                ["auto_route"] = true,   // 接管默认路由（全系统流量）
+                ["strict_route"] = true, // 严格路由：阻止其他程序绕过 TUN 直连
+                ["stack"] = "mixed",
+            });
+        }
+        return list.ToArray();
+    }
+
     /// <summary>生成完整 config.json 内容（代理设置页预览 + 写盘共用）。
     /// 防探测硬化：DNS 防泄露（DoH 经隧道，不泄露域名给运营商明文 DNS）、
     /// 路由 auto_detect_interface（杜绝绕过隧道的直连泄漏）。</summary>
@@ -191,6 +219,12 @@ internal static class ProxyManager
         var outbound = BuildOutbound(s);
         var route = new Dictionary<string, object>
         {
+            // 官方推荐规则：嗅探协议 + 劫持 DNS 进 sing-box 模块（TUN 下接管系统 DNS）
+            ["rules"] = new object[]
+            {
+                new Dictionary<string, object> { ["action"] = "sniff" },
+                new Dictionary<string, object> { ["protocol"] = "dns", ["action"] = "hijack-dns" },
+            },
             ["final"] = "proxy",
             // 绑定默认网卡出站：防止 sing-box 在多网卡/多路由下意外泄漏直连
             ["auto_detect_interface"] = true,
@@ -199,15 +233,7 @@ internal static class ProxyManager
         var config = new Dictionary<string, object>
         {
             ["log"] = new Dictionary<string, object> { ["level"] = "warn", ["timestamp"] = true },
-            ["inbounds"] = new object[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["type"] = "mixed", ["tag"] = "in",
-                    // 仅回环：局域网其他用户无法探测/盗用本机代理通道
-                    ["listen"] = "127.0.0.1", ["listen_port"] = s.SbLocalPort,
-                },
-            },
+            ["inbounds"] = Inbounds(s),
             ["outbounds"] = new object[]
             {
                 outbound,
@@ -272,22 +298,43 @@ internal static class ProxyManager
         }
 
         WriteConfig(s);
-        _core = Process.Start(new ProcessStartInfo
+        // TUN 模式需要创建虚拟网卡：必须以管理员权限启动（弹 UAC），
+        // 提权进程无法重定向输出——退出码判断成败
+        var psi = new ProcessStartInfo
         {
             FileName = ExePath,
             Arguments = "run -c \"" + ConfigPath + "\"",
             WorkingDirectory = Dir,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        });
+        };
+        if (s.SbTun)
+        {
+            psi.UseShellExecute = true;
+            psi.Verb = "runas"; // UAC 提权
+        }
+        else
+        {
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+        }
+        try
+        {
+            _core = Process.Start(psi);
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            throw new InvalidOperationException("TUN 模式需要管理员权限（已取消 UAC 授权）");
+        }
         if (_core == null) throw new InvalidOperationException("sing-box 启动失败");
 
-        _core.OutputDataReceived += (_, e) => { if (e.Data is { } line) Console.WriteLine("[singbox] " + line); };
-        _core.ErrorDataReceived += (_, e) => { if (e.Data is { } line) Console.WriteLine("[singbox] " + line); };
-        _core.BeginOutputReadLine();
-        _core.BeginErrorReadLine();
+        if (!s.SbTun)
+        {
+            _core.OutputDataReceived += (_, e) => { if (e.Data is { } line) Console.WriteLine("[singbox] " + line); };
+            _core.ErrorDataReceived += (_, e) => { if (e.Data is { } line) Console.WriteLine("[singbox] " + line); };
+            _core.BeginOutputReadLine();
+            _core.BeginErrorReadLine();
+        }
 
         // 等本地入站端口就绪（最多 5s），失败则带出内核退出原因
         for (var i = 0; i < 50 && !_core.HasExited; i++)
