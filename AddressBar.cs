@@ -13,8 +13,15 @@ internal sealed class AddressBar : Control
 
     public event Action? StarClicked;
 
+    /// <summary>用户确认了建议（回车选中行 / 点击行）：参数是可直接加载的 URL。</summary>
+    public event Action<string>? NavigateRequested;
+
     private bool _starred;
     private bool _hoverStar;
+    private OmniboxPopup? _popup;
+
+    /// <summary>DPI 缩放（96 基准，随所在窗体 DPI）。</summary>
+    private int S(int v) => (int)Math.Round(v * DeviceDpi / 96d);
 
     public AddressBar()
     {
@@ -25,11 +32,61 @@ internal sealed class AddressBar : Control
         Cursor = Cursors.IBeam;
         Height = 35;
 
-        _box.Enter += (s, e) => { _box.BackColor = Color.White; Invalidate(); };
-        _box.Leave += (s, e) => { _box.BackColor = BackColorOfPill; Invalidate(); };
+        _box.Enter += (s, e) => { _box.BackColor = Color.White; Invalidate(); if (_box.TextLength == 0) UpdatePopup(); };
+        _box.Leave += (s, e) => { _box.BackColor = BackColorOfPill; Invalidate(); ClosePopup(); };
+        _box.TextChanged += (s, e) => { if (_box.Focused) UpdatePopup(); }; // 程序性同步（切标签等）不弹
+        // 本订阅先于 MainForm 的 Enter 处理（构造在先），可先行消费建议导航
+        _box.KeyDown += OnBoxKeyDown;
         _box.BackColor = BackColorOfPill;
         Controls.Add(_box);
     }
+
+    // ---------------- 建议浮层 ----------------
+
+    private void OnBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_popup == null || !_popup.Open) return;
+        switch (e.KeyCode)
+        {
+            case Keys.Down:
+                _popup.Move(1);
+                e.SuppressKeyPress = true;
+                break;
+            case Keys.Up:
+                _popup.Move(-1);
+                e.SuppressKeyPress = true;
+                break;
+            case Keys.Escape:
+                ClosePopup();
+                e.SuppressKeyPress = true;
+                break;
+            case Keys.Enter:
+                // 选中行（含默认首行）按建议走；无行不拦截，交给 MainForm 按输入原文导航
+                if (_popup.SelectedTarget is string target)
+                {
+                    NavigateRequested?.Invoke(target);
+                    e.SuppressKeyPress = true;
+                }
+                break;
+        }
+    }
+
+    private void UpdatePopup()
+    {
+        var input = _box.Text;
+        var rows = History.Suggest(input, maxRows: 6,
+            likelyUrl: MainForm.LooksLikeAddress(input), searchRowOf: MainForm.SearchRow);
+        if (rows.Count == 0) { ClosePopup(); return; }
+
+        _popup ??= new OmniboxPopup(this);
+        _popup.Navigate -= OnPopupNavigate;
+        _popup.Navigate += OnPopupNavigate;
+        _popup.Update(rows);
+    }
+
+    private void OnPopupNavigate(string target) => NavigateRequested?.Invoke(target);
+
+    private void ClosePopup() => _popup?.Hide();
 
     private static Color BackColorOfPill => Color.FromArgb(0xF1, 0xF3, 0xF4);
 
@@ -52,13 +109,13 @@ internal sealed class AddressBar : Control
         set { if (_starred != value) { _starred = value; Invalidate(); } }
     }
 
-    private Rectangle StarRect => new(Width - 30, 0, 26, Height);
+    private Rectangle StarRect => new(Width - S(30), 0, S(26), Height);
 
     protected override void OnLayout(LayoutEventArgs e)
     {
         base.OnLayout(e);
-        // 左侧搜索图标 38px、右侧星标 30px
-        _box.SetBounds(38, (Height - _box.PreferredHeight) / 2, Math.Max(10, Width - 76), _box.PreferredHeight);
+        // 左侧搜索图标区 38px、右侧星标区 30px（按 DPI 缩放）
+        _box.SetBounds(S(38), (Height - _box.PreferredHeight) / 2, Math.Max(10, Width - S(76)), _box.PreferredHeight);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
@@ -113,7 +170,7 @@ internal sealed class AddressBar : Control
 
         using var font = MainForm.IconFontOf(10f);
         // 左侧搜索图标
-        var iconRect = new Rectangle(10, 0, 22, Height);
+        var iconRect = new Rectangle(S(10), 0, S(22), Height);
         TextRenderer.DrawText(g, "\uE721", font, iconRect, UiColors.TextMuted,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
 
