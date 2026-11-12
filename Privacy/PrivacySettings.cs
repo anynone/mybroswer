@@ -81,6 +81,29 @@ public sealed class PrivacySettings
     /// <summary>sing-box 本地混合入站端口（socks+http 同端口）</summary>
     public int SbLocalPort { get; set; } = 7897;
 
+    // ---- sing-box TLS / 传输层（vmess/vless/trojan 使用；独立代理设置页配置） ----
+    /// <summary>启用 TLS（vmess/vless/trojan 默认开；shadowsocks 忽略）</summary>
+    public bool SbTls { get; set; } = true;
+    /// <summary>SNI（TLS server_name；空 = 用服务器地址）</summary>
+    public string SbSni { get; set; } = "";
+    /// <summary>uTLS 指纹（chrome / firefox / safari / random；空 = 不启用）</summary>
+    public string SbFingerprint { get; set; } = "";
+    /// <summary>允许自签名/证书不匹配（不安全）</summary>
+    public bool SbInsecure { get; set; } = false;
+    /// <summary>ALPN 列表（逗号分隔，空 = 默认）</summary>
+    public string SbAlpn { get; set; } = "h2,http/1.1";
+    /// <summary>vless flow（xtls-rprx-vision；空 = 不用）</summary>
+    public string SbFlow { get; set; } = "";
+    /// <summary>Reality public key（vless；启用则走 Reality）</summary>
+    public string SbRealityKey { get; set; } = "";
+    /// <summary>Reality short id</summary>
+    public string SbRealitySid { get; set; } = "";
+    /// <summary>传输层："tcp" / "ws"（vmess/vless）</summary>
+    public string SbTransport { get; set; } = "tcp";
+    public string SbWsPath { get; set; } = "/";
+    /// <summary>ws Host 头（CDN 场景；空 = 用服务器地址）</summary>
+    public string SbWsHost { get; set; } = "";
+
     /// <summary>全局单例，Program.Main 启动时加载</summary>
     public static PrivacySettings Current { get; set; } = new();
 

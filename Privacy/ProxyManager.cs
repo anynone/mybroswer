@@ -94,34 +94,94 @@ internal static class ProxyManager
         Console.WriteLine($"[proxy] sing-box 就绪：{ExePath}");
     }
 
-    /// <summary>生成并写入 config.json（本地混合入站 + 远端协议出站）。</summary>
-    private static void WriteConfig(PrivacySettings s)
+    /// <summary>按协议生成 sing-box 出站配置对象（vmess/vless/trojan 组装 TLS、Reality、ws 传输）。</summary>
+    public static Dictionary<string, object> BuildOutbound(PrivacySettings s)
     {
+        var server = s.SbServer.Trim();
         Dictionary<string, object> outbound = s.SbProto switch
         {
             "vmess" => new()
             {
                 ["type"] = "vmess", ["tag"] = "proxy",
-                ["server"] = s.SbServer.Trim(), ["server_port"] = s.SbPort, ["uuid"] = s.SbUuid,
+                ["server"] = server, ["server_port"] = s.SbPort,
+                ["uuid"] = s.SbUuid, ["security"] = "auto",
             },
             "vless" => new()
             {
                 ["type"] = "vless", ["tag"] = "proxy",
-                ["server"] = s.SbServer.Trim(), ["server_port"] = s.SbPort, ["uuid"] = s.SbUuid,
+                ["server"] = server, ["server_port"] = s.SbPort,
+                ["uuid"] = s.SbUuid,
             },
             "trojan" => new()
             {
                 ["type"] = "trojan", ["tag"] = "proxy",
-                ["server"] = s.SbServer.Trim(), ["server_port"] = s.SbPort, ["password"] = s.SbPassword,
+                ["server"] = server, ["server_port"] = s.SbPort,
+                ["password"] = s.SbPassword,
             },
             _ => new()
             {
                 ["type"] = "shadowsocks", ["tag"] = "proxy",
-                ["server"] = s.SbServer.Trim(), ["server_port"] = s.SbPort,
-                ["method"] = s.SbMethod, ["password"] = s.SbPassword,
+                ["server"] = server, ["server_port"] = s.SbPort,
+                ["method"] = string.IsNullOrWhiteSpace(s.SbMethod) ? "aes-128-gcm" : s.SbMethod.Trim(),
+                ["password"] = s.SbPassword,
             },
         };
 
+        // TLS（vmess/vless/trojan；Reality 仅 vless）
+        var useTls = s.SbTls && s.SbProto is "vmess" or "vless" or "trojan";
+        if (useTls)
+        {
+            var tls = new Dictionary<string, object>
+            {
+                ["enabled"] = true,
+                ["server_name"] = string.IsNullOrWhiteSpace(s.SbSni) ? server : s.SbSni.Trim(),
+                ["insecure"] = s.SbInsecure,
+            };
+            var alpn = s.SbAlpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (alpn.Length > 0) tls["alpn"] = alpn;
+            if (!string.IsNullOrWhiteSpace(s.SbFingerprint))
+            {
+                tls["utls"] = new Dictionary<string, object>
+                {
+                    ["enabled"] = true,
+                    ["fingerprint"] = s.SbFingerprint.Trim(),
+                };
+            }
+            if (s.SbProto == "vless" && !string.IsNullOrWhiteSpace(s.SbRealityKey))
+            {
+                tls["reality"] = new Dictionary<string, object>
+                {
+                    ["enabled"] = true,
+                    ["public_key"] = s.SbRealityKey.Trim(),
+                    ["short_id"] = s.SbRealitySid.Trim(),
+                };
+            }
+            outbound["tls"] = tls;
+        }
+
+        // vless flow（xtls-rprx-vision）
+        if (s.SbProto == "vless" && !string.IsNullOrWhiteSpace(s.SbFlow))
+            outbound["flow"] = s.SbFlow.Trim();
+
+        // 传输层（vmess/vless：ws）
+        if (s.SbProto is "vmess" or "vless" && s.SbTransport == "ws")
+        {
+            var ws = new Dictionary<string, object>
+            {
+                ["type"] = "ws",
+                ["path"] = string.IsNullOrWhiteSpace(s.SbWsPath) ? "/" : s.SbWsPath.Trim(),
+            };
+            if (!string.IsNullOrWhiteSpace(s.SbWsHost))
+                ws["headers"] = new Dictionary<string, object> { ["Host"] = s.SbWsHost.Trim() };
+            outbound["transport"] = ws;
+        }
+
+        return outbound;
+    }
+
+    /// <summary>生成完整 config.json 内容（代理设置页预览 + 写盘共用）。</summary>
+    public static string GenerateConfigJson(PrivacySettings s)
+    {
         var config = new Dictionary<string, object>
         {
             ["log"] = new Dictionary<string, object> { ["level"] = "warn", ["timestamp"] = true },
@@ -135,14 +195,19 @@ internal static class ProxyManager
             },
             ["outbounds"] = new object[]
             {
-                outbound,
+                BuildOutbound(s),
                 new Dictionary<string, object> { ["type"] = "direct", ["tag"] = "direct" },
             },
             ["route"] = new Dictionary<string, object> { ["final"] = "proxy" },
         };
+        return JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+    }
 
+    /// <summary>写入 config.json（本地混合入站 + 远端协议出站）。</summary>
+    private static void WriteConfig(PrivacySettings s)
+    {
         Directory.CreateDirectory(Dir);
-        File.WriteAllText(ConfigPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(ConfigPath, GenerateConfigJson(s));
     }
 
     /// <summary>启动 sing-box 内核（配置缺失/端口被占时抛异常说明原因）。</summary>

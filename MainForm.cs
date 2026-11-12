@@ -707,6 +707,7 @@ internal sealed class MainForm : Form
         menu.Items.Add(more);
 
         menu.Items.Add(MenuStyle.Item("隐私防护", "\uE713", (s, e) => ShowPrivacySettings(), "Ctrl+,"));
+        menu.Items.Add(MenuStyle.Item("代理设置", "\uE71E", (s, e) => ShowProxySettings()));
         menu.Items.Add(MenuStyle.Item("书签栏", "\uE735", (s, e) => ToggleBookmarkBar(), "Ctrl+Shift+B"));
         menu.Items.Add(MenuStyle.Item(
             AdBlocker.Enabled ? "广告拦截 ✓（已拦截 " + AdBlocker.BlockedCount + " 次）" : "广告拦截 ✗（已关闭）",
@@ -759,6 +760,16 @@ internal sealed class MainForm : Form
             onChanged: _ => _privacy.SettingsChanged(_tabs.ToList()));
         form.ShowDialog(this);
     }
+
+    /// <summary>独立代理设置页（sing-box 完整参数 + 手动代理）。</summary>
+    internal void ShowProxySettings()
+    {
+        using var form = new ProxyForm(PrivacySettings.Current,
+            onChanged: _ => _privacy.SettingsChanged(_tabs.ToList()));
+        form.ShowDialog(this);
+    }
+
+    internal void UiOpenProxySettings() => Ui(ShowProxySettings);
 
     private void SetHomePage(string url)
     {

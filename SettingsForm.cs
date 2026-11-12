@@ -35,18 +35,10 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _manPort = new() { PlaceholderText = "端口" };
     private readonly TextBox _manUser = new() { PlaceholderText = "用户名（选填）" };
     private readonly TextBox _manPass = new() { PlaceholderText = "密码（选填，暂不生效）", UseSystemPasswordChar = true };
-    private readonly ComboBox _sbProto = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _sbServer = new() { PlaceholderText = "服务器地址" };
-    private readonly TextBox _sbPort = new() { PlaceholderText = "端口" };
-    private readonly TextBox _sbMethod = new() { PlaceholderText = "加密方法（仅 shadowsocks）" };
-    private readonly TextBox _sbPassword = new() { PlaceholderText = "密码（ss/trojan）", UseSystemPasswordChar = true };
-    private readonly TextBox _sbUuid = new() { PlaceholderText = "UUID（vmess/vless）" };
-    private readonly TextBox _sbLocal = new() { PlaceholderText = "本地端口" };
-    private readonly Button _sbDownload = new() { Text = "下载/更新内核" };
-    private readonly Button _proxyTest = new() { Text = "测试连接" };
-    private readonly Label _proxyState = new() { AutoSize = true, ForeColor = Muted };
+    private readonly Button _sbOpen = new() { Text = "配置 sing-box…" };
+    private readonly Label _sbSummary = new() { AutoSize = true, ForeColor = Muted };
     private readonly Panel _manualRows = new();
-    private readonly Panel _sbRows = new();
+    private readonly Panel _sbRow = new();
 
     public SettingsForm(PrivacySettings settings, Action<PrivacySettings>? onChanged = null)
     {
@@ -58,7 +50,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 856);
+        ClientSize = new Size(560, 760);
         AutoScroll = true;
         Font = new Font("Segoe UI", 9f);
 
@@ -71,7 +63,7 @@ internal sealed class SettingsForm : Form
         {
             Text = "所有修改即时保存并生效；浏览器语言/代理修改后重启生效。",
             AutoSize = true,
-            Location = new Point(18, 826),
+            Location = new Point(18, 730),
             ForeColor = Muted,
         };
         Controls.Add(note);
@@ -226,11 +218,10 @@ internal sealed class SettingsForm : Form
     }
 
     // ---- 代理 ----
-
-    /// <summary>代理分组：模式 + 手动 SOCKS/HTTP + sing-box（远端协议转本地混合端口）。</summary>
+    /// <summary>代理分组：模式 + 手动 SOCKS/HTTP；sing-box 详细参数在独立「代理设置」页配置。</summary>
     private void BuildProxyGroup()
     {
-        var g = new GroupBox { Text = "代理（修改后重启浏览器生效）", Bounds = new Rectangle(12, 592, 536, 226) };
+        var g = new GroupBox { Text = "代理（修改后重启浏览器生效）", Bounds = new Rectangle(12, 592, 536, 128) };
 
         // 模式行
         _proxyMode.Items.AddRange(new object[] { "直连（不使用代理）", "手动代理（SOCKS / HTTP）", "sing-box（内置内核，直连代理服务器）" });
@@ -268,64 +259,21 @@ internal sealed class SettingsForm : Form
         _manualRows.SetBounds(0, 34, 536, 86);
         _manualRows.Controls.AddRange(new Control[] { manL1, _manScheme, _manHost, _manPort, manL2, _manUser, _manPass });
 
-        // sing-box 三行
-        _sbProto.Items.AddRange(new object[] { "shadowsocks", "vmess", "vless", "trojan" });
-        _sbProto.SelectedIndex = Math.Max(0, _sbProto.Items.IndexOf(_s.SbProto));
-        _sbProto.SelectedIndexChanged += (s, e) => { _s.SbProto = (string)_sbProto.SelectedItem!; Changed(); };
-        _sbServer.Text = _s.SbServer;
-        _sbServer.TextChanged += (s, e) => { _s.SbServer = _sbServer.Text.Trim(); Changed(); };
-        _sbPort.Text = _s.SbPort.ToString();
-        _sbPort.TextChanged += (s, e) => { if (int.TryParse(_sbPort.Text.Trim(), out var p) && p is > 0 and < 65536) _s.SbPort = p; Changed(); };
-        _sbMethod.Text = _s.SbMethod;
-        _sbMethod.TextChanged += (s, e) => { _s.SbMethod = _sbMethod.Text.Trim(); Changed(); };
-        _sbPassword.Text = _s.SbPassword;
-        _sbPassword.TextChanged += (s, e) => { _s.SbPassword = _sbPassword.Text; Changed(); };
-        _sbUuid.Text = _s.SbUuid;
-        _sbUuid.TextChanged += (s, e) => { _s.SbUuid = _sbUuid.Text.Trim(); Changed(); };
-        _sbLocal.Text = _s.SbLocalPort.ToString();
-        _sbLocal.TextChanged += (s, e) => { if (int.TryParse(_sbLocal.Text.Trim(), out var p) && p is > 0 and < 65536) _s.SbLocalPort = p; Changed(); };
-        var sbL1 = new Label { Text = "协议/服务器/端口", AutoSize = true, Location = new Point(16, 26) };
-        _sbProto.SetBounds(140, 22, 100, 24);
-        _sbServer.SetBounds(248, 22, 140, 24);
-        _sbPort.SetBounds(396, 22, 60, 24);
-        var sbL2 = new Label { Text = "密码/加密方法", AutoSize = true, Location = new Point(16, 60) };
-        _sbPassword.SetBounds(140, 56, 150, 24);
-        _sbMethod.SetBounds(300, 56, 156, 24);
-        var sbL3 = new Label { Text = "UUID / 本地端口", AutoSize = true, Location = new Point(16, 94) };
-        _sbUuid.SetBounds(140, 90, 220, 24);
-        _sbLocal.SetBounds(396, 90, 60, 24);
-        _sbRows.SetBounds(0, 34, 536, 130);
-        _sbRows.Controls.AddRange(new Control[]
-            { sbL1, _sbProto, _sbServer, _sbPort, sbL2, _sbPassword, _sbMethod, sbL3, _sbUuid, _sbLocal });
-
-        // 按钮 + 状态
-        _sbDownload.SetBounds(16, 186, 110, 28);
-        _sbDownload.Click += async (s, e) =>
+        // sing-box：当前链路摘要 + 独立配置页入口
+        var sbL = new Label { Text = "当前链路", AutoSize = true, Location = new Point(16, 64) };
+        _sbSummary.SetBounds(76, 60, 300, 20);
+        _sbOpen.SetBounds(380, 56, 120, 26);
+        _sbOpen.Click += (s, e) =>
         {
-            _proxyState.Text = "正在下载 sing-box 内核…";
-            try
-            {
-                await ProxyManager.EnsureBinaryAsync();
-                _kernelState.Text = "内核：已下载";
-                _proxyState.Text = "sing-box 内核下载完成。";
-            }
-            catch (Exception ex)
-            {
-                _proxyState.Text = "下载失败：" + ex.Message;
-            }
+            using var form = new ProxyForm(_s);
+            form.ShowDialog(this);
+            _kernelState.Text = ProxyManager.BinaryReady ? "内核：已下载" : "内核：未下载";
+            UpdateProxyVisibility();
         };
-        _proxyTest.SetBounds(136, 186, 90, 28);
-        _proxyTest.Click += async (s, e) =>
-        {
-            _proxyState.Text = "测试中…";
-            try { _proxyState.Text = await ProxyManager.TestConnectionAsync(_s); }
-            catch (Exception ex) { _proxyState.Text = "测试失败：" + ex.Message; }
-        };
-        _proxyState.Location = new Point(240, 192);
-        _proxyState.MaximumSize = new Size(290, 0); // 允许换行
+        _sbRow.SetBounds(0, 34, 536, 60);
+        _sbRow.Controls.AddRange(new Control[] { sbL, _sbSummary, _sbOpen });
 
-        g.Controls.AddRange(new Control[]
-            { modeLabel, _proxyMode, _kernelState, _manualRows, _sbRows, _sbDownload, _proxyTest, _proxyState });
+        g.Controls.AddRange(new Control[] { modeLabel, _proxyMode, _kernelState, _manualRows, _sbRow });
         UpdateProxyVisibility();
         Controls.Add(g);
     }
@@ -333,8 +281,12 @@ internal sealed class SettingsForm : Form
     private void UpdateProxyVisibility()
     {
         _manualRows.Visible = _s.ProxyMode == "manual";
-        _sbRows.Visible = _s.ProxyMode == "singbox";
+        _sbRow.Visible = _s.ProxyMode == "singbox";
+        _sbSummary.Text = string.IsNullOrWhiteSpace(_s.SbServer)
+            ? "未配置（点右侧按钮设置服务器）"
+            : $"{_s.SbProto} → {_s.SbServer}:{_s.SbPort} → 本地 {_s.SbLocalPort}";
     }
+
 
     // ---- 辅助 ----
 
