@@ -88,6 +88,10 @@ internal sealed class BookmarkBar : Panel
 
     private readonly FlowLayoutPanel _flow;
 
+    /// <summary>DPI 缩放（96 基准），由主窗体在句柄创建/DPI 变化时下发。</summary>
+    private double _scale = 1;
+    internal int S(int v) => (int)Math.Round(v * _scale);
+
     public BookmarkBar()
     {
         Dock = DockStyle.Top;
@@ -106,6 +110,15 @@ internal sealed class BookmarkBar : Panel
         Controls.Add(_flow);
 
         Bookmarks.Changed += Reload;
+        Reload();
+    }
+
+    /// <summary>应用缩放：重算栏高/内边距并重建按钮（按钮尺寸在建时取 S()）。</summary>
+    public void SetChromeScale(double scale)
+    {
+        _scale = scale;
+        Height = S(45);
+        _flow.Padding = new Padding(S(6), S(5), S(6), S(4));
         Reload();
     }
 
@@ -144,7 +157,7 @@ internal sealed class BookmarkGroupButton : Control
     {
         _group = group;
         _bar = bar;
-        Size = new Size(Math.Min(180, Math.Max(64, TextRenderer.MeasureText(group, new Font("Segoe UI", 9f)).Width + 44)), 34);
+        Size = new Size(Math.Min(_bar.S(180), Math.Max(_bar.S(64), TextRenderer.MeasureText(group, new Font("Segoe UI", 9f)).Width + _bar.S(44))), _bar.S(34));
         Margin = new Padding(1, 1, 1, 1);
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
@@ -208,9 +221,9 @@ internal sealed class BookmarkGroupButton : Control
         }
         using var font = MainForm.IconFontOf(10f);
         // 文件夹图标
-        TextRenderer.DrawText(g, "\uE8B7", font, new Rectangle(8, 0, 20, Height), Color.FromArgb(0x5F, 0x63, 0x68),
+        TextRenderer.DrawText(g, "\uE8B7", font, new Rectangle(_bar.S(8), 0, _bar.S(20), Height), Color.FromArgb(0x5F, 0x63, 0x68),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
-        var textRect = new Rectangle(30, 0, Width - 34, Height);
+        var textRect = new Rectangle(_bar.S(30), 0, Width - _bar.S(34), Height);
         TextRenderer.DrawText(g, _group, Font, textRect, UiColors.Text,
             TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
     }
@@ -227,7 +240,7 @@ internal sealed class BookmarkButton : Control
     {
         _bookmark = bookmark;
         _bar = bar;
-        Size = new Size(Math.Min(180, Math.Max(60, TextRenderer.MeasureText(DisplayTitle, new Font("Segoe UI", 9f)).Width + 40)), 34);
+        Size = new Size(Math.Min(_bar.S(180), Math.Max(_bar.S(60), TextRenderer.MeasureText(DisplayTitle, new Font("Segoe UI", 9f)).Width + _bar.S(40))), _bar.S(34));
         Margin = new Padding(1, 1, 1, 1);
         Cursor = Cursors.Hand;
         var tips = new ToolTip();
@@ -285,9 +298,9 @@ internal sealed class BookmarkButton : Control
         }
         using (var dot = new SolidBrush(UiColors.TextFaint))
         {
-            g.FillEllipse(dot, 8, Height / 2 - 3, 6, 6);
+            g.FillEllipse(dot, _bar.S(8), Height / 2 - _bar.S(3), _bar.S(6), _bar.S(6));
         }
-        var textRect = new Rectangle(20, 0, Width - 24, Height);
+        var textRect = new Rectangle(_bar.S(20), 0, Width - _bar.S(24), Height);
         TextRenderer.DrawText(g, DisplayTitle, Font, textRect, UiColors.Text,
             TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
     }

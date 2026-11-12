@@ -13,6 +13,11 @@ internal sealed class ProxyForm : Form
     private readonly PrivacySettings _s;
     private readonly Action<PrivacySettings>? _onChanged;
 
+    /// <summary>DPI 缩放系数（DeviceDpi/96）。构造期按 96 基准布局；
+    /// OnLoad 先整树缩放子控件，此后动态改分组高度/挪按钮经 S() 折算。</summary>
+    private float _scale = 1f;
+    private int S(int v) => (int)Math.Round(v * _scale);
+
     // 服务器
     private readonly ComboBox _proto = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox _server = new() { PlaceholderText = "服务器域名或 IP" };
@@ -74,6 +79,9 @@ internal sealed class ProxyForm : Form
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(560, 668);
         AutoScroll = true;
+        // 布局按 96 DPI 设计；显示时框架按显示器实际 DPI 整体缩放（含跨屏 DPI 变化）
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9f);
 
         BuildServerGroup();
@@ -86,12 +94,27 @@ internal sealed class ProxyForm : Form
 
         _note = new Label
         {
-            Text = "修改即时保存，重启浏览器后生效；浏览器流量经 sing-box 本地端口转发到代理服务器。",
+            Text = "修改即时保存并生效；浏览器流量经 sing-box 本地端口转发到代理服务器。",
             AutoSize = true,
             ForeColor = Muted,
         };
         Controls.Add(_note);
         UpdateVisibility();
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        _scale = DeviceDpi / 96f;
+        DpiUtil.ScaleTree(this, _scale); // 框架不缩子控件，见 DpiUtil 注释
+        UpdateVisibility();              // 动态分组高度/按钮位置按新比例重排
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e); // 静态控件由框架按新 DPI 重缩放
+        _scale = DeviceDpi / 96f;
+        UpdateVisibility(); // 动态分组高度/按钮位置按新 DPI 重新折算
     }
 
     private void BuildServerGroup()
@@ -303,6 +326,8 @@ internal sealed class ProxyForm : Form
             Text = "config.json 预览（实际写入 %LocalAppData%/RiBrowser/singbox）",
             StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(640, 460),
+            AutoScaleDimensions = new SizeF(96F, 96F),
+            AutoScaleMode = AutoScaleMode.Dpi,
             Font = new Font("Consolas", 9f),
         };
         var box = new TextBox
@@ -334,11 +359,11 @@ internal sealed class ProxyForm : Form
         if (p == "trojan")
         {
             _password.Visible = true;
-            _password.SetBounds(86, 26, 200, 24);
+            _password.SetBounds(S(86), S(26), S(200), S(24));
         }
         else
         {
-            _password.SetBounds(340, 26, 146, 24);
+            _password.SetBounds(S(340), S(26), S(146), S(24));
         }
 
         // TLS 区（ss 不用 TLS）。Tag 记录"意图可见性"：构造期窗体未显示时
@@ -347,13 +372,13 @@ internal sealed class ProxyForm : Form
         _tlsGroup.Visible = !ss;
         _tlsFields.Visible = _tls.Checked;
         _realityRow.Visible = p == "vless" && _tls.Checked;
-        _tlsGroup.Height = !_tls.Checked ? 48 : (p == "vless" ? 172 : 138);
+        _tlsGroup.Height = !_tls.Checked ? S(48) : (p == "vless" ? S(172) : S(138));
 
         // 传输区
         _transportGroup.Tag = p is "vmess" or "vless";
         _transportGroup.Visible = p is "vmess" or "vless";
         _wsFields.Visible = _s.SbTransport == "ws";
-        _transportGroup.Height = _s.SbTransport == "ws" ? 86 : 52;
+        _transportGroup.Height = _s.SbTransport == "ws" ? S(86) : S(52);
 
         LayoutGroups();
     }
@@ -363,24 +388,24 @@ internal sealed class ProxyForm : Form
     /// 沿父链恒为 false，直接读 Visible 会把窗口高度缩到下限导致内容截断。</summary>
     private void LayoutGroups()
     {
-        var y = 10;
+        var y = S(10);
         foreach (Control c in Controls)
         {
             // 恒显分组未设 Tag（null 视为可见），动态分组由 UpdateVisibility 写入
             if (c is GroupBox g && ((bool?)g.Tag ?? true))
             {
-                g.Location = new Point(12, y);
-                y += g.Height + 6;
+                g.Location = new Point(S(12), y);
+                y += g.Height + S(6);
             }
         }
-        _test.Location = new Point(16, y + 4);
-        _download.Location = new Point(114, y + 4);
-        _preview.Location = new Point(232, y + 4);
-        _state.Location = new Point(16, y + 40);
-        _state.MaximumSize = new Size(504, 0);
-        _note.Location = new Point(18, y + 76);
+        _test.Location = new Point(S(16), y + S(4));
+        _download.Location = new Point(S(114), y + S(4));
+        _preview.Location = new Point(S(232), y + S(4));
+        _state.Location = new Point(S(16), y + S(40));
+        _state.MaximumSize = new Size(S(504), 0);
+        _note.Location = new Point(S(18), y + S(76));
         // 随内容伸缩（可增可减）：协议字段增减时不留大片空白，也避免切换抖动过大
-        ClientSize = new Size(ClientSize.Width, Math.Max(430, y + 100));
+        ClientSize = new Size(ClientSize.Width, Math.Max(S(430), y + S(100)));
     }
 
     private void Changed()

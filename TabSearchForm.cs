@@ -13,11 +13,16 @@ internal sealed class TabSearchForm : Form
     private readonly SearchField _search;
     private readonly Panel _rows;
 
+    /// <summary>DPI 缩放（96 基准，取主窗体的 UiScale，与本窗口所在屏一致）。</summary>
+    internal double Scale { get; }
+    internal int S(int v) => (int)Math.Round(v * Scale);
+
     private sealed record RowInfo(string Title, string Url, MainForm? Window, BrowserTab? Tab, bool Active);
 
     public TabSearchForm(MainForm form)
     {
         _form = form;
+        Scale = form.UiScale;
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
@@ -27,11 +32,11 @@ internal sealed class TabSearchForm : Form
         Font = new Font("Segoe UI", 9f);
 
         // 顶部搜索域：灰底圆角 + 放大镜 + 无边框输入（Chrome 布局，左右各留 12px）
-        _search = new SearchField
+        _search = new SearchField(Scale)
         {
             Dock = DockStyle.Top,
-            Height = 52,
-            Padding = new Padding(12, 10, 12, 10),
+            Height = S(52),
+            Padding = new Padding(S(12), S(10), S(12), S(10)),
         };
         _search.Box.TextChanged += (s, e) => Rebuild();
         _search.Box.KeyDown += OnSearchKey;
@@ -41,7 +46,7 @@ internal sealed class TabSearchForm : Form
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Color.White,
-            Padding = new Padding(0, 0, 2, 8),
+            Padding = new Padding(0, 0, S(2), S(8)),
         };
 
         Controls.Add(_rows);
@@ -66,8 +71,8 @@ internal sealed class TabSearchForm : Form
     /// <summary>在锚点按钮正下方弹出。</summary>
     public static void ShowBelow(Control anchor, MainForm form)
     {
-        var location = anchor.PointToScreen(new Point(0, anchor.Height + 4));
-        var popup = new TabSearchForm(form) { Location = location };
+        var popup = new TabSearchForm(form)
+        { Location = anchor.PointToScreen(new Point(0, anchor.Height + form.S(4))) };
         popup.Show(anchor.FindForm());
         popup._search.Box.Focus();
     }
@@ -75,7 +80,7 @@ internal sealed class TabSearchForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 12);
+        using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), S(12));
         Region = new Region(path);
         Invalidate();
     }
@@ -83,7 +88,7 @@ internal sealed class TabSearchForm : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         using var pen = new Pen(UiColors.Border);
-        using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 12);
+        using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), S(12));
         e.Graphics.DrawPath(pen, path);
     }
 
@@ -132,13 +137,13 @@ internal sealed class TabSearchForm : Form
 
         _rows.ResumeLayout();
 
-        // 高度自适应：搜索域 56 + 内容，超高滚动；贴近屏幕底时向上展开
+        // 高度自适应：搜索域 + 内容，超高滚动；贴近屏幕底时向上展开
         var content = _rows.Controls.Cast<Control>().Sum(c => c.Height + c.Margin.Vertical);
-        var height = Math.Min(560, 56 + content + 6);
+        var height = Math.Min(S(560), S(56) + content + S(6));
         var screen = Screen.FromControl(this).WorkingArea;
         if (Location.Y + height > screen.Bottom)
             Location = new Point(Location.X, Math.Max(screen.Top, screen.Bottom - height));
-        SetBounds(Location.X, Location.Y, PanelWidth, height);
+        SetBounds(Location.X, Location.Y, S(PanelWidth), height);
     }
 
     private void AddSection(string text)
@@ -147,8 +152,8 @@ internal sealed class TabSearchForm : Form
         {
             Text = text,
             Dock = DockStyle.Top,
-            Height = 30,
-            Padding = new Padding(14, 8, 8, 2),
+            Height = S(30),
+            Padding = new Padding(S(14), S(8), S(8), S(2)),
             ForeColor = UiColors.TextMuted,
             Font = new Font("Segoe UI Semibold", 9f),
             BackColor = Color.White,
@@ -163,7 +168,7 @@ internal sealed class TabSearchForm : Form
         {
             Text = text,
             Dock = DockStyle.Top,
-            Height = 44,
+            Height = S(44),
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = UiColors.TextFaint,
             BackColor = Color.White,
@@ -190,6 +195,9 @@ internal sealed class TabSearchForm : Form
     /// <summary>灰底圆角搜索域：放大镜图标 + 无边框输入框（EM_SETCUEBANNER 原生占位符）。</summary>
     private sealed class SearchField : Panel
     {
+        private readonly double _scale;
+        private int S(int v) => (int)Math.Round(v * _scale);
+
         public readonly TextBox Box = new()
         {
             BorderStyle = BorderStyle.None,
@@ -198,32 +206,33 @@ internal sealed class TabSearchForm : Form
             BackColor = UiColors.Pill,
         };
 
-        public SearchField()
+        public SearchField(double scale)
         {
+            _scale = scale;
             BackColor = Color.White;
             DoubleBuffered = true;
 
-            var field = new Panel { Height = 32, Dock = DockStyle.Fill };
+            var field = new Panel { Height = S(32), Dock = DockStyle.Fill };
             field.Paint += (s, e) =>
             {
                 var g = e.Graphics;
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 var rect = new Rectangle(0, 0, field.Width - 1, field.Height - 1);
-                using (var path = UiPaint.RoundedRect(rect, 16))
+                using (var path = UiPaint.RoundedRect(rect, S(16)))
                 using (var bg = new SolidBrush(UiColors.Pill))
                 {
                     g.FillPath(bg, path);
                 }
                 using var font = MainForm.IconFontOf(9f);
-                TextRenderer.DrawText(g, "\uE721", font, new Rectangle(9, 0, 22, field.Height), UiColors.TextMuted,
+                TextRenderer.DrawText(g, "\uE721", font, new Rectangle(S(9), 0, S(22), field.Height), UiColors.TextMuted,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
             };
-            Box.SetBounds(36, 7, 200, 20);
+            Box.SetBounds(S(36), S(7), S(200), S(20));
             // 原生占位符：聚焦时也显示浅灰提示（与 Chrome 一致），有输入才消失
             Box.HandleCreated += (s, e) =>
                 Native.SendMessage(Box.Handle, 0x1501, (IntPtr)1, "搜索标签页");
             field.Controls.Add(Box);
-            field.Resize += (s, e) => Box.Width = Math.Max(20, field.Width - 46);
+            field.Resize += (s, e) => Box.Width = Math.Max(S(20), field.Width - S(46));
             Controls.Add(field);
         }
     }
@@ -241,15 +250,15 @@ internal sealed class TabSearchForm : Form
             _info = info;
             _owner = owner;
             Dock = DockStyle.Top;
-            Height = RowHeight;
-            Margin = new Padding(8, 0, 10, 0);
+            Height = owner.S(RowHeight);
+            Margin = new Padding(owner.S(8), 0, owner.S(10), 0);
             Cursor = Cursors.Hand;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
-                     | ControlStyles.UserPaint | ControlStyles.UserMouse | ControlStyles.ResizeRedraw, true);
+                 | ControlStyles.UserPaint | ControlStyles.UserMouse | ControlStyles.ResizeRedraw, true);
         }
 
-        private Rectangle IconRect => new(12, (Height - 16) / 2, 16, 16);
-        private Rectangle CloseRect => new(Width - 36, (Height - 18) / 2, 22, 18);
+        private Rectangle IconRect => new(_owner.S(12), (Height - _owner.S(16)) / 2, _owner.S(16), _owner.S(16));
+        private Rectangle CloseRect => new(Width - _owner.S(36), (Height - _owner.S(18)) / 2, _owner.S(22), _owner.S(18));
         private static string Host(string url)
         {
             try { return new Uri(url).Host; }
@@ -313,7 +322,7 @@ internal sealed class TabSearchForm : Form
 
             if (_hover)
             {
-                using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 2, Height - 1), 8);
+                using var path = UiPaint.RoundedRect(new Rectangle(0, 0, Width - 2, Height - 1), _owner.S(8));
                 using var bg = new SolidBrush(UiColors.Pill);
                 g.FillPath(bg, path);
             }
@@ -327,8 +336,9 @@ internal sealed class TabSearchForm : Form
 
             var host = Host(_info.Url);
             var showClose = _hover && _info.Tab != null;
-            var titleRight = showClose ? Width - 44 : Width - 14 - TextRenderer.MeasureText(host, new Font("Segoe UI", 8.75f)).Width;
-            var titleRect = new Rectangle(36, 0, Math.Max(24, titleRight - 40), Height);
+            var titleRight = showClose ? Width - _owner.S(44)
+                : Width - _owner.S(14) - TextRenderer.MeasureText(host, new Font("Segoe UI", 8.75f)).Width;
+            var titleRect = new Rectangle(_owner.S(36), 0, Math.Max(_owner.S(24), titleRight - _owner.S(40)), Height);
             TextRenderer.DrawText(g, _info.Title,
                 _info.Active ? new Font(Font, FontStyle.Bold) : Font, titleRect, UiColors.Text,
                 TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
@@ -342,7 +352,7 @@ internal sealed class TabSearchForm : Form
             }
             else
             {
-                var domainRect = new Rectangle(Width - 14 - 180, 0, 180, Height);
+                var domainRect = new Rectangle(Width - _owner.S(14) - _owner.S(180), 0, _owner.S(180), Height);
                 TextRenderer.DrawText(g, host, new Font("Segoe UI", 8.75f), domainRect, UiColors.TextFaint,
                     TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.Right);
             }

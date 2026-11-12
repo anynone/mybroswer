@@ -18,6 +18,9 @@ internal sealed class ScriptsForm : Form
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(460, 360);
+        // 布局按 96 DPI 设计；显示时框架按显示器实际 DPI 整体缩放
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9f);
 
         var note = new Label
@@ -62,6 +65,12 @@ internal sealed class ScriptsForm : Form
         };
 
         Controls.AddRange(new Control[] { note, _list, _import, _remove, _openDir });
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        DpiUtil.ScaleTree(this, DeviceDpi / 96f); // 框架不缩子控件，见 DpiUtil 注释
     }
 
     private void ReloadList()
