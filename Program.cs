@@ -22,6 +22,9 @@ internal static class Program
             CachePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "RiBrowser", "Cache"),
+            // 会话 Cookie（登录时下发、无过期时间）默认只在内存、优雅退出才落盘；
+            // 强杀/崩溃会全部丢失 → 表现为"网站登录突然退出"。开启后即时持久化。
+            PersistSessionCookies = true,
             // 语言三端对齐（页面 CDP 覆盖 / Worker 原生读取 / HTTP 头）都源自 BrowserLanguage：
             // Worker 的 navigator.languages 不走脚本垫片，只认这里的 AcceptLanguageList。
             // 注意 CEF 不剥离 q 值，列表必须用纯标签（"en-US,en"），否则 Worker 读到 "en;q=0.9"
