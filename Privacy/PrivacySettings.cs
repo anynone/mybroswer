@@ -55,6 +55,32 @@ public sealed class PrivacySettings
     /// <summary>Canvas 扰动种子（同一配置指纹稳定，换种子即换指纹）</summary>
     public string FingerprintSeed { get; set; } = "";
 
+    // ==================== 代理（重启浏览器后生效） ====================
+
+    /// <summary>"off" 直连 / "manual" 手动 HTTP·SOCKS 代理 / "singbox" 内置 sing-box 内核</summary>
+    public string ProxyMode { get; set; } = "off";
+
+    /// <summary>manual 模式协议："socks5" / "http"</summary>
+    public string ProxyScheme { get; set; } = "socks5";
+    public string ProxyHost { get; set; } = "";
+    public int ProxyPort { get; set; } = 1080;
+    /// <summary>认证代理 Chromium 命令行不支持，仅预留（带认证请用 sing-box 模式）</summary>
+    public string ProxyUser { get; set; } = "";
+    public string ProxyPass { get; set; } = "";
+
+    /// <summary>sing-box 远端协议："shadowsocks" / "vmess" / "vless" / "trojan"</summary>
+    public string SbProto { get; set; } = "shadowsocks";
+    public string SbServer { get; set; } = "";
+    public int SbPort { get; set; } = 443;
+    /// <summary>shadowsocks 加密方法（如 aes-128-gcm / 2022-blake3-aes-128-gcm）</summary>
+    public string SbMethod { get; set; } = "aes-128-gcm";
+    /// <summary>shadowsocks / trojan 密码</summary>
+    public string SbPassword { get; set; } = "";
+    /// <summary>vmess / vless UUID</summary>
+    public string SbUuid { get; set; } = "";
+    /// <summary>sing-box 本地混合入站端口（socks+http 同端口）</summary>
+    public int SbLocalPort { get; set; } = 7897;
+
     /// <summary>全局单例，Program.Main 启动时加载</summary>
     public static PrivacySettings Current { get; set; } = new();
 

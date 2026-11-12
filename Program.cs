@@ -48,6 +48,14 @@ internal static class Program
         if (!string.IsNullOrEmpty(privacy.BrowserLanguage))
             settings.CefCommandLineArgs.Add("lang", privacy.BrowserLanguage);
 
+        // 代理：manual 直连用户的 SOCKS/HTTP 端口；singbox 经内置 sing-box 内核中转。
+        // CEF 的 proxy-server 只在初始化时生效 → 修改配置需重启浏览器。
+        if (RiBrowser.Privacy.ProxyManager.CefProxyServer(privacy) is { } proxyServer)
+        {
+            settings.CefCommandLineArgs.Add("proxy-server", proxyServer);
+            Console.WriteLine("[proxy] CEF proxy-server = " + proxyServer);
+        }
+
         Cef.Initialize(settings);
 
         // 广告拦截引擎自测（--adtest [URL]）：不启动 UI，直接对样例 URL 跑匹配引擎
@@ -63,6 +71,13 @@ internal static class Program
         {
             DnbSpike.Run();
             return;
+        }
+
+        // sing-box 模式：拉起内核（阻塞至本地端口就绪；失败不阻断浏览器，走直连）
+        if (RiBrowser.Privacy.ProxyManager.NeedsCore(privacy))
+        {
+            try { RiBrowser.Privacy.ProxyManager.StartCore(privacy); }
+            catch (Exception ex) { Console.WriteLine("[proxy] " + ex.Message); }
         }
 
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -87,6 +102,7 @@ internal static class Program
         main.Show(); // 无参 Application.Run 不自动显示窗体，需显式 Show
         Application.Run();
 
+        RiBrowser.Privacy.ProxyManager.StopCore(); // 收掉 sing-box 子进程
         Cef.Shutdown();
     }
 
