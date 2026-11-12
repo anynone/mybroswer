@@ -217,7 +217,7 @@ internal sealed class ProxyForm : Form
     /// <summary>防探测（内网安全）：DNS 防泄露 + DoH 服务器。</summary>
     private void BuildAntiProbeGroup()
     {
-        var g = new GroupBox { Text = "防探测（内网安全）", Bounds = new Rectangle(12, 462, 536, 102) };
+        var g = new GroupBox { Text = "防探测（内网安全）", Bounds = new Rectangle(12, 462, 536, 122) };
 
         _dnsCheck.Location = new Point(16, 24);
         _dnsCheck.Checked = _s.SbDnsProtect;
@@ -230,8 +230,8 @@ internal sealed class ProxyForm : Form
             ForeColor = Muted,
             Location = new Point(34, 44),
         };
-        var ld = new Label { Text = "DoH", AutoSize = true, Location = new Point(16, 74) };
-        _dnsServer.SetBounds(80, 70, 406, 24);
+        var ld = new Label { Text = "DoH", AutoSize = true, Location = new Point(16, 88) };
+        _dnsServer.SetBounds(80, 84, 406, 24);
         _dnsServer.Text = _s.SbDnsServer;
         _dnsServer.TextChanged += (s, e) => { _s.SbDnsServer = _dnsServer.Text.Trim(); Changed(); };
 
