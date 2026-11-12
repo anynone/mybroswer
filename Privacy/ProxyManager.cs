@@ -316,10 +316,12 @@ internal static class ProxyManager
             // StopCore 只需写文件（无需权限）。
             var stopFlag = Path.Combine(Dir, "stop.flag");
             try { File.Delete(stopFlag); } catch { /* 上次残留 */ }
+            // PowerShell 单引号字符串内转义：用户名含 '（如 O'Brien）时不破坏脚本
+            string Ps(string s) => s.Replace("'", "''");
             var script = string.Join("\n",
                 $"$pp = {Environment.ProcessId}",
-                $"$stop = '{stopFlag}'",
-                $"$core = Start-Process -FilePath '{ExePath}' -ArgumentList 'run','-c','{ConfigPath}' -WindowStyle Hidden -PassThru",
+                $"$stop = '{Ps(stopFlag)}'",
+                $"$core = Start-Process -FilePath '{Ps(ExePath)}' -ArgumentList 'run','-c','{Ps(ConfigPath)}' -WindowStyle Hidden -PassThru",
                 "while (-not $core.HasExited) {",
                 "  if (-not (Get-Process -Id $pp -ErrorAction SilentlyContinue) -or (Test-Path $stop)) {",
                 "    Stop-Process -Id $core.Id -Force; break",
