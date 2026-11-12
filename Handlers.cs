@@ -171,7 +171,15 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
 
     public void OnAfterCreated(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
 
-    public bool DoClose(IWebBrowser chromiumWebBrowser, IBrowser browser) => false;
+    public bool DoClose(IWebBrowser chromiumWebBrowser, IBrowser browser)
+    {
+        // 页面 window.close()（登录/SSO 完成后的自关很常见）：
+        // 之前返回 false 交由 CEF 销毁 → 标签成僵尸（控件没了标签还在），
+        // 关闭链路失控时甚至连锁退出浏览器。改为接管：走正常关标签路径。
+        RiLog.Info($"[life] DoClose（页面请求关闭）url={chromiumWebBrowser.Address}");
+        _form.UiCloseBrowserTab(chromiumWebBrowser);
+        return true; // 取消 CEF 默认销毁，由 CloseTab 统一处理
+    }
 
     public void OnBeforeClose(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
 
@@ -180,6 +188,7 @@ internal sealed class LifeSpanHandler : ILifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings browserSettings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
+        RiLog.Info($"[life] OnBeforePopup disp={targetDisposition} url={targetUrl}");
         // 空地址弹窗（window.open('') 探测/占位窗，如隐私分析站的 10×10 探测窗）：
         // 按"弹窗已拦截"静默取消——window.open 返回 null，站点会走"已拦截"分支；
         // 之前把它开成新标签页还抢焦点，表现为"点击后跳到 about:blank"

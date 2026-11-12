@@ -136,9 +136,11 @@ internal static class Program
         SessionStore.Register((MainForm)form);
         form.FormClosed += (s, e) =>
         {
+            RiLog.Info($"[win] FormClosed 剩余窗口={_windows.Count - 1}");
             _windows.Remove(form);
             if (_windows.Count == 0)
             {
+                RiLog.Info("[app] 全部窗口已关 → 退出进程");
                 SessionStore.MarkCleanExit(); // 用户主动关闭：下次正常启动
                 Application.ExitThread();
             }

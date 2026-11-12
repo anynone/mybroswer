@@ -533,6 +533,7 @@ internal sealed class MainForm : Form
     {
         var index = _tabs.IndexOf(tab);
         if (index < 0) return;
+        RiLog.Info($"[tabs] CloseTab 剩余={_tabs.Count - 1} url={tab.Browser.Address}");
 
         // 记入"最近关闭"，供标签条下拉箭头重新打开
         ClosedTabs.Push(tab.TabItem.Title, tab.Browser.Address);
@@ -546,6 +547,7 @@ internal sealed class MainForm : Form
 
         if (_tabs.Count == 0)
         {
+            RiLog.Info("[win] 最后一个标签已关 → 关闭窗口退出");
             Close(); // 最后一个标签关闭时退出浏览器
             return;
         }
@@ -646,6 +648,14 @@ internal sealed class MainForm : Form
     private void ShowTabSearchMenu() => TabSearchForm.ShowBelow(_tabSearchButton, this);
 
     internal void UiAddTab(string? url, bool select = true) => Ui(() => AddTab(url, select));
+
+    /// <summary>页面 window.close() 的接管：按浏览器控件找到所属标签走正常关闭路径。</summary>
+    internal void UiCloseBrowserTab(IWebBrowser browser) => Ui(() =>
+    {
+        var tab = _tabs.FirstOrDefault(t => ReferenceEquals(t.Browser, browser));
+        if (tab == null) return; // 已在关闭流程中（窗口退出/重复回调）
+        CloseTab(tab);
+    });
     internal void UiCloseActiveTab() => Ui(() => { if (_activeTab != null) CloseTab(_activeTab); });
     internal void UiOpenPrivacySettings() => Ui(ShowPrivacySettings);
     internal void UiToggleBookmark() => Ui(ToggleBookmarkForCurrent);
@@ -850,6 +860,12 @@ internal sealed class MainForm : Form
         var pillWidth = Math.Max(80, _toolbar.Width - NavBarLeft - 52);
         _addressBar.SetBounds(NavBarLeft, 6, pillWidth, 35); // 地址/搜索框 35px
         _menuButton.SetBounds(_toolbar.Width - 44, 7, 34, 34);
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        RiLog.Info($"[win] FormClosing reason={e.CloseReason} tabs={_tabs.Count}");
+        base.OnFormClosing(e);
     }
 
     private void OnFormKeyDown(object? sender, KeyEventArgs e)
