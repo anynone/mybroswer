@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace RiBrowser.Privacy;
@@ -11,10 +12,15 @@ namespace RiBrowser.Privacy;
 /// 配置由浏览器生成，浏览器仍是唯一控制面（ClashApi 选择顺序：
 /// verge 管道 → 自管控制器 → 用户配置的 HTTP 控制器）。
 /// 有外部内核时永远让位（混合端口会冲突），只做运行时动作、不碰外部内核文件。
+/// TUN 需要管理员权限：开 TUN 时经 RestartElevated 提权重启（UAC），提权内核
+/// 普通权限进程杀不掉 → 下次启动接管复用（改配置走控制器热重载）。
 /// </summary>
 internal static class ClashCoreManager
 {
     private static Process? _core;
+    /// <summary>当前内核是否提权运行（我们 runas 启动的，或接管的提权遗留）——
+    /// 杀不掉，Stop/Start 走接管 + 控制器热重载路径。</summary>
+    private static bool _elevated;
     public static bool CoreRunning => _core is { HasExited: false };
 
     private static string Dir => Path.Combine(
@@ -106,6 +112,57 @@ internal static class ClashCoreManager
             ["geoip-format"] = "mmdb",
         };
 
+        // TUN 需要提权内核；用户在控制台开过后持久化在设置里，
+        // 提权重启/接管时按它决定 TUN 是否随内核启动。
+        // dns-hijack：应用的 DNS（无论配了哪个服务器）进 TUN 即被劫持，
+        // 国外域名 fake-ip 由出口节点远端解析（DNS 零泄漏），国内域名走
+        // 内部 DNS（国内 DoH）解析后按 GEOIP,CN 直连
+        if (s.ClashTunOn)
+        {
+            root["tun"] = new Dictionary<string, object>
+            {
+                ["enable"] = true,
+                ["stack"] = "mixed",
+                ["auto-route"] = true,
+                ["auto-detect-interface"] = true,
+                // Windows 多宿主 DNS：系统并行向各网卡 DNS 发查询，发往路由器的
+                // 走同网段链路路由绕过 TUN（DNS 泄露根因）。strict-route 加防火墙
+                // 规则拦截其他网卡上的 53 端口，只留 TUN 侧解析
+                ["strict-route"] = true,
+                ["dns-hijack"] = new List<object> { "any:53" },
+            };
+            root["dns"] = new Dictionary<string, object>
+            {
+                ["enable"] = true,
+                ["ipv6"] = false,
+                ["listen"] = "0.0.0.0:53",
+                ["enhanced-mode"] = "fake-ip",
+                ["fake-ip-range"] = "7.7.0.0/16",
+                // 保留：局域网名、Windows 联网检测/NTP 等对 IP 敏感的查询返回真实 IP
+                ["fake-ip-filter"] = new List<object>
+                {
+                    "*.lan", "+.local", "+.msftconnecttest.com", "+.msftncsi.com",
+                    "time.*.com", "time.*.gov", "time.*.apple.com", "time1.cloud.tencent.com",
+                    "+.ntp.org", "+.pool.ntp.org",
+                },
+                // 启动阶段解析 DoH 域名的基础直连 DNS
+                ["default-nameserver"] = new List<object> { "223.5.5.5", "119.29.29.29" },
+                // 代理节点自身域名的解析（国内直连，保证节点可达）
+                ["proxy-server-nameserver"] = new List<object> { "223.5.5.5", "119.29.29.29" },
+                ["nameserver"] = new List<object> { "8.8.8.8", "1.1.1.1" },
+                ["fallback"] = new List<object> { "https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query" },
+                ["fallback-filter"] = new Dictionary<string, object>
+                {
+                    ["geoip"] = true,
+                    ["geoip-code"] = "CN",
+                    ["ipcidr"] = new List<object> { "240.0.0.0/4" },
+                },
+                // DNS 上游按分流规则出站：境外 DNS/DoH 命中 MATCH 走代理，
+                // 否则 nameserver 的 8.8.8.8/1.1.1.1 明文查询直连出去基本不可用
+                ["respect-rules"] = true,
+            };
+        }
+
         // 内置"直连"占位 + 手动节点（原样并入）
         var proxies = new List<object>
         {
@@ -161,8 +218,12 @@ internal static class ClashCoreManager
         if (hasSub) group["use"] = new List<string> { "sub" };
         root["proxy-groups"] = new List<object> { group };
 
-        // 规则：回环直连兜底；用户 rules 接管——目标不存在的条目自动丢弃
-        // （常见于整份配置粘贴：rules 引用原文里的分组名，这里只有 节点选择/DIRECT/节点名）
+        // 规则优先级：回环兜底 → 用户 rules（可覆盖后面所有内置分流）→
+        // 隐私检测站例外 → 中国域名直连 → MATCH 兜底。
+        // GEOSITE 域名库做中国直连的原因：fake-ip 下 GEOIP 类规则不为域名触发
+        // 解析、会整体漏到 MATCH；域名规则没有这个问题。
+        // geosite:cn 社区列表把 browserleaks 等检测站也收进去了，直连会让
+        // 测漏页显示家宽 IP、被误判泄露 → 检测站强制走代理。
         var rules = new List<object> { "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve" };
         if (manualRules != null)
         {
@@ -183,10 +244,24 @@ internal static class ClashCoreManager
                 if (target.Length > 0 && valid.Contains(target)) rules.Add(text);
                 else RiLog.Info($"[mihomo] 丢弃无法解析的规则（目标分组不存在）：{text}");
             }
-            if (!rules.Any(r => r.ToString()?.StartsWith("MATCH", StringComparison.OrdinalIgnoreCase) == true))
-                rules.Add("MATCH,节点选择");
         }
-        else rules.Add("MATCH,节点选择");
+
+        // 内置分流插到用户 MATCH 之前（MATCH 是终结规则，放后面永远不生效）
+        var builtIn = new List<object>
+        {
+            "DOMAIN-SUFFIX,browserleaks.com,节点选择",
+            "DOMAIN-SUFFIX,browserleaks.net,节点选择",
+            "DOMAIN-SUFFIX,browserleaks.org,节点选择",
+            "GEOSITE,CN,DIRECT",
+        };
+        var matchIdx = rules.FindIndex(r => (r.ToString() ?? "")
+            .StartsWith("MATCH", StringComparison.OrdinalIgnoreCase));
+        if (matchIdx >= 0) rules.InsertRange(matchIdx, builtIn);
+        else
+        {
+            rules.AddRange(builtIn);
+            rules.Add("MATCH,节点选择");
+        }
         root["rules"] = rules;
 
         return new YamlDotNet.Serialization.SerializerBuilder().Build().Serialize(root);
@@ -196,6 +271,17 @@ internal static class ClashCoreManager
     /// 失败抛异常说明原因。零节点也常驻（内置"直连"占位）。</summary>
     public static void Start(PrivacySettings s)
     {
+        // 上次会话遗留的提权内核杀不掉（普通权限进程无权 Kill），接管复用：
+        // 配置有变经控制器热重载推送，避免端口被占导致启动失败
+        if (TryAdoptElevatedCore(s))
+        {
+            ReloadViaController(s);
+            RiLog.Info("[mihomo] 接管上次会话的提权内核（TUN 保持可用）");
+            if (s.ClashTunOn)
+                _ = EnsureTunRoutesAsync(s); // 重载后校验路由真装上了（首启偶发漏装）
+            return;
+        }
+
         Stop();
         StopStaleByPidFile();
         EnsureBinaryAsync().Wait();
@@ -220,6 +306,7 @@ internal static class ClashCoreManager
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         _core = Process.Start(psi) ?? throw new InvalidOperationException("mihomo 启动失败");
+        _elevated = false;
         File.WriteAllText(PidPath, _core.Id.ToString());
         // 内核输出双写：riLog 落盘可诊断（WinExe 无控制台，Console 单写会全部丢失）
         _core.OutputDataReceived += (_, e) => { if (e.Data is { } line) RiLog.Info("[mihomo] " + line); };
@@ -238,6 +325,179 @@ internal static class ClashCoreManager
         if (!ProbeController(s))
             throw new InvalidOperationException("mihomo 控制器未就绪（端口被占用？）");
         RiLog.Info($"[mihomo] 自管内核就绪：127.0.0.1:{s.ClashMixedPort} · 控制器 {s.ClashSelfControllerPort}");
+    }
+
+    /// <summary>以管理员权限重启内核（UAC 确认；用户取消抛 Win32Exception）。
+    /// 配置先落盘（含 TUN 块），提权内核直接带 TUN 起来。ShellExecute 的
+    /// runas 无法重定向输出，提权后内核日志不再进 riLog。</summary>
+    public static void RestartElevated(PrivacySettings s)
+    {
+        if (_elevated && CoreRunning)
+        { // 已是提权内核：只热重载（配置里已带 TUN）
+            ReloadViaController(s);
+            return;
+        }
+        Stop();
+        EnsureBinaryAsync().Wait();
+        EnsureGeoFiles();
+        if (string.IsNullOrWhiteSpace(s.ClashSelfSecret))
+        {
+            s.ClashSelfSecret = Convert.ToHexString(Guid.NewGuid().ToByteArray())[..24];
+            s.Save();
+        }
+        Directory.CreateDirectory(Path.Combine(Dir, "providers"));
+        File.WriteAllText(ConfigPath, GenerateConfigYaml(s));
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ExePath,
+            Arguments = $"-d \"{Dir}\" -f \"{ConfigPath}\"",
+            UseShellExecute = true,
+            Verb = "runas", // UAC
+            // ShellExecute 路径 CreateNoWindow 无效，控制台黑框须用 WindowStyle 藏
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        _core = Process.Start(psi) ?? throw new InvalidOperationException("mihomo 提权启动失败");
+        _elevated = true;
+        File.WriteAllText(PidPath, _core.Id.ToString());
+
+        // UAC 确认后内核仍要几秒就绪；订阅拉取慢时上限放宽
+        for (var i = 0; i < 80 && !_core.HasExited; i++)
+        {
+            if (ProbeController(s)) break;
+            Thread.Sleep(250);
+        }
+        if (_core.HasExited)
+            throw new InvalidOperationException($"提权 mihomo 异常退出（代码 {_core.ExitCode}）");
+        if (!ProbeController(s))
+            throw new InvalidOperationException("提权 mihomo 控制器未就绪");
+        RiLog.Info("[mihomo] 提权内核就绪：TUN 可用");
+        if (s.ClashTunOn)
+            _ = EnsureTunRoutesAsync(s);
+    }
+
+    /// <summary>TUN 接管路由自愈：提权内核首次带 TUN 启动时偶发路由未装上
+    /// （网卡在、0.0.0.0/0 却不指向它，流量仍走物理网卡；提权内核日志收不到，
+    /// 静默失败只能靠查路由表发现）。缺失则开关一次 TUN 让内核重装。</summary>
+    public static async Task EnsureTunRoutesAsync(PrivacySettings s)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            await Task.Delay(attempt == 0 ? 2500 : 4000);
+            if (TunRouteInstalled()) return;
+            RiLog.Info($"[mihomo] TUN 路由未装上，开关重装（第 {attempt + 1} 次）");
+            await ClashApi.SendControllerAsync(s, "PATCH", "/configs",
+                System.Text.Encoding.UTF8.GetBytes("{\"tun\":{\"enable\":false}}"), "application/json");
+            await Task.Delay(1200);
+            await ClashApi.SendControllerAsync(s, "PATCH", "/configs",
+                System.Text.Encoding.UTF8.GetBytes("{\"tun\":{\"enable\":true}}"), "application/json");
+        }
+    }
+
+    /// <summary>默认路由是否已指向 TUN 网卡（mihomo TUN 固定用 198.18.0.1/30 网段，
+    /// route print 里默认路由的接口列为该地址即接管生效）。查询失败按已装处理。</summary>
+    private static bool TunRouteInstalled()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "route.exe",
+                Arguments = "print -4",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+            };
+            using var p = Process.Start(psi)!;
+            var output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(5000);
+            return Regex.IsMatch(output, @"0\.0\.0\.0\s+0\.0\.0\.0\s+\d+\.\d+\.\d+\.\d+\s+198\.18\.0\.1");
+        }
+        catch { return true; }
+    }
+
+    /// <summary>把最新生成的配置经控制器热重载推给运行中的内核
+    /// （PUT /configs?force=true，面板「重载配置」同一机制；提权内核改配置靠它）。</summary>
+    public static bool ReloadViaController(PrivacySettings s)
+    {
+        try
+        {
+            var yaml = GenerateConfigYaml(s);
+            File.WriteAllText(ConfigPath, yaml); // pid 文件与磁盘保持一致
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            using var req = new HttpRequestMessage(HttpMethod.Put,
+                $"http://127.0.0.1:{s.ClashSelfControllerPort}/configs?force=true");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", s.ClashSelfSecret);
+            req.Content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(new { path = "", payload = yaml }),
+                System.Text.Encoding.UTF8, "application/json");
+            using var resp = http.Send(req);
+            return resp.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            RiLog.Error("ClashReload", ex);
+            return false;
+        }
+    }
+
+    /// <summary>pid 文件指向的 mihomo 还活着、确实提权、控制器应答 → 可接管。
+    /// （普通权限的遗留内核走原路径杀掉重启，保住 stdout 日志管道。）</summary>
+    private static bool TryAdoptElevatedCore(PrivacySettings s)
+    {
+        try
+        {
+            if (_elevated && CoreRunning) return true;
+            if (!File.Exists(PidPath)) return false;
+            var pid = int.Parse(File.ReadAllText(PidPath).Trim());
+            var p = Process.GetProcessById(pid); // 不存在抛 ArgumentException
+            if (p is not { HasExited: false } || p.ProcessName != "mihomo") return false;
+            if (!IsProcessElevated(p)) return false;
+            if (!ProbeController(s)) return false;
+            _core = p;
+            _elevated = true;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // ---- 进程提权判定（token TokenElevation）----
+    private const uint TOKEN_QUERY = 0x8;
+    private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    private const int TokenElevation = 20;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(IntPtr tokenHandle, int tokenInformationClass,
+        out uint tokenInformation, uint tokenInformationLength, out uint returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>目标进程是否以管理员运行。判定失败的场合（未提权进程对提权进程
+    /// 的句柄/令牌访问受限）按"是提权"兜底——接管错一个普通内核只是丢日志，
+    /// 判反了会让端口被占、浏览器启动失败。</summary>
+    private static bool IsProcessElevated(Process p)
+    {
+        var hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, p.Id);
+        if (hProc == IntPtr.Zero) return true;
+        try
+        {
+            if (!OpenProcessToken(hProc, TOKEN_QUERY, out var tok)) return true;
+            try
+            {
+                return GetTokenInformation(tok, TokenElevation, out var elev,
+                    sizeof(uint), out _) && elev != 0;
+            }
+            finally { CloseHandle(tok); }
+        }
+        finally { CloseHandle(hProc); }
     }
 
     /// <summary>GET /version（带自管密钥）。</summary>

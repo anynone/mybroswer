@@ -51,7 +51,7 @@ internal static class ClashApi
     {
         try
         {
-            using var resp = await SendAsync(s, new HttpMethod(method), pathAndQuery, body);
+            using var resp = await SendAsync(s, new HttpMethod(method), pathAndQuery, body, contentType);
             var bytes = await resp.Content.ReadAsByteArrayAsync();
             return ((int)resp.StatusCode,
                 resp.Content.Headers.ContentType?.MediaType is { } mt ? mt + (resp.Content.Headers.ContentType.CharSet is { } cs ? "; " + cs : "") : null,
@@ -209,7 +209,7 @@ internal static class ClashApi
     /// <summary>统一请求入口。控制器选择链：内置内核控制器（clash 模式一律自管，
     /// 见 ClashCoreManager）→ verge 管道（密钥自动发现）→ 用户配置的 HTTP 控制器。
     /// 调用方负责 using 响应。</summary>
-    private static async Task<HttpResponseMessage> SendAsync(PrivacySettings s, HttpMethod method, string path, object? body = null)
+    private static async Task<HttpResponseMessage> SendAsync(PrivacySettings s, HttpMethod method, string path, object? body = null, string? contentType = null)
     {
         var self = ClashCoreManager.CoreRunning;
         var pipeClient = self ? null : PipeClient();
@@ -222,7 +222,12 @@ internal static class ClashApi
         var req = new HttpRequestMessage(method, url);
         if (secret.Length > 0)
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
-        if (body != null)
+        if (body is byte[] raw)
+        { // 面板反代的原样字节：JsonSerializer 会把 byte[] 编成 Base64 字符串，内核解不出直接 400
+            req.Content = new ByteArrayContent(raw);
+            req.Content.Headers.TryAddWithoutValidation("Content-Type", contentType ?? "application/json");
+        }
+        else if (body != null)
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         return await (pipeClient ?? Http).SendAsync(req);
     }

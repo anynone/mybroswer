@@ -54,11 +54,15 @@ internal sealed class MainForm : Form
     {
         var s = input.Trim();
         if (s.Length == 0 || s.Contains(' ')) return false;
-        if (Uri.TryCreate(s, UriKind.Absolute, out var u) &&
-            (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeFile))
+        if (Uri.TryCreate(s, UriKind.Absolute, out var u) && IsNavigableScheme(u))
             return true;
         return s.Contains('.') || s.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) || s.Contains(':');
     }
+
+    /// <summary>地址栏可直达的 scheme（clash:// = 内置 Clash 控制台）。</summary>
+    private static bool IsNavigableScheme(Uri uri) =>
+        uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps
+        || uri.Scheme == Uri.UriSchemeFile || uri.Scheme == "clash";
 
     private static readonly Color StripColor = Color.FromArgb(0xDE, 0xE1, 0xE6);
     private static readonly Color ToolbarColor = Color.White;
@@ -833,8 +837,7 @@ internal sealed class MainForm : Form
             if (_netState == NetState.Locked)
             {
                 if (!onLockPage) _lockOrigin[browser] = e.FailedUrl;
-                browser.LoadHtml(NetLockPageHtml(
-                    ClashPanel.BaseUrl is { } b ? b + "/config" : null), LockUrl);
+                browser.LoadHtml(NetLockPageHtml(ClashPanel.Url + "/config"), LockUrl);
             }
             else
             {
@@ -975,8 +978,7 @@ internal sealed class MainForm : Form
         var s = input.Trim();
         if (s.Length == 0) return null;
 
-        if (Uri.TryCreate(s, UriKind.Absolute, out var uri) &&
-            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeFile))
+        if (Uri.TryCreate(s, UriKind.Absolute, out var uri) && IsNavigableScheme(uri))
         {
             return uri.AbsoluteUri;
         }
@@ -1231,8 +1233,8 @@ internal sealed class MainForm : Form
     /// <summary>锁定时自动开控制台：已有面板页则不重复开（防心跳反复锁定时刷屏）。</summary>
     private async Task OpenClashPanelIfNeededAsync()
     {
-        var url = await ClashPanel.EnsureStartedAsync(PrivacySettings.Current);
-        if (url == null) return;
+        if (!await ClashPanel.EnsureFilesAsync(PrivacySettings.Current)) return;
+        var url = ClashPanel.Url;
         if (_tabs.Any(t => !t.Browser.IsDisposed
                 && t.Browser.Address.StartsWith(url, StringComparison.OrdinalIgnoreCase)))
             return;
@@ -1330,7 +1332,7 @@ internal sealed class MainForm : Form
         _clashTimer.Start();
         _ = CheckClashAsync();
         if (PrivacySettings.Current.ProxyMode == "clash")
-            _ = ClashPanel.EnsureStartedAsync(PrivacySettings.Current); // 预热控制台（含首次下载）
+            _ = ClashPanel.EnsureFilesAsync(PrivacySettings.Current); // 预热控制台（含首次下载）
     }
 
     /// <summary>Clash 通道离线时的替代错误页（以原 URL 为虚拟地址加载，
@@ -1401,28 +1403,39 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>打开浏览器内 Clash 控制台（metacubexd 面板）。</summary>
+    /// <summary>打开浏览器内 Clash 控制台（metacubexd 面板，clash://console）。</summary>
     private async Task OpenClashPanelAsync()
     {
-        var url = await ClashPanel.EnsureStartedAsync(PrivacySettings.Current);
-        if (url == null)
+        if (!await ClashPanel.EnsureFilesAsync(PrivacySettings.Current))
         {
             MessageBox.Show(this, "控制台面板下载失败：需要能访问 GitHub（直连或经当前 Clash）。",
                 "Ri 浏览器", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        UiAddTab(url, true);
+        UiAddTab(ClashPanel.Url, true);
     }
 
     /// <summary>重载已打开的控制台标签页（语言切换等配置变更后立即生效）。</summary>
     private void ReloadPanelTabs()
     {
-        var b = ClashPanel.BaseUrl;
-        if (b == null) return;
+        var b = ClashPanel.Url;
         foreach (var t in _tabs)
             if (!t.Browser.IsDisposed
                 && t.Browser.Address.StartsWith(b, StringComparison.OrdinalIgnoreCase))
                 t.Browser.Reload();
+    }
+
+    /// <summary>按 CEF 浏览器标识找 IBrowser（clash://console 的 WS 桥向真实
+    /// 标签页推送帧用——scheme 处理器里拿到的包装是短命对象，只能按标识回查）。</summary>
+    internal static CefSharp.IBrowser? FindBrowserById(int id)
+    {
+        foreach (var w in Program.Windows)
+            foreach (var t in w._tabs)
+            {
+                if (t.Browser.IsDisposed) continue;
+                if (t.Browser.TryGetBrowserCoreById(id, out var ib)) return ib;
+            }
+        return null;
     }
 
     /// <summary>状态轮询：非 clash 模式不着色；绿=端口+控制器就绪（附出口节点/延迟），
@@ -1568,8 +1581,7 @@ internal sealed class MainForm : Form
             {
                 s.ClashPanelLang = c;
                 s.Save();
-                ClashPanel.RefreshConfig(s);
-                ReloadPanelTabs();
+                ReloadPanelTabs(); // config.js 由 scheme 处理器按最新设置动态生成
             });
             item.Checked = s.ClashPanelLang.Trim() == c;
             langMenu.DropDownItems.Add(item);

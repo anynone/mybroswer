@@ -94,6 +94,9 @@ public sealed class PrivacySettings
     public int ClashSelfControllerPort { get; set; } = 9099;
     /// <summary>自管内核控制器密钥（首次启动自动生成）</summary>
     public string ClashSelfSecret { get; set; } = "";
+    /// <summary>控制台开过 TUN：写进内核配置（提权内核重启/接管时保持 TUN 开启）；
+    /// 关闭 TUN 时回写 false</summary>
+    public bool ClashTunOn { get; set; } = false;
     /// <summary>控制台面板语言："zh-CN" / "en-US"，空 = 跟随浏览器语言
     ///（默认中文：浏览器的防指纹伪装语言 en-US 会被面板误当作用户语言）</summary>
     public string ClashPanelLang { get; set; } = "zh-CN";

@@ -91,6 +91,20 @@ internal static class Program
         if (!string.IsNullOrEmpty(privacy.BrowserLanguage))
             settings.CefCommandLineArgs.Add("lang", privacy.BrowserLanguage);
 
+        // Clash 控制台注册为 clash:// 自定义 scheme：页面/API/WS 桥全部由
+        // ClashSchemeHandler 进程内应答，不开任何本地 TCP 端口
+        settings.RegisterScheme(new CefCustomScheme
+        {
+            SchemeName = "clash",
+            DomainName = "console",
+            SchemeHandlerFactory = new ClashSchemeHandlerFactory(),
+            IsStandard = true,
+            IsSecure = true,
+            IsCorsEnabled = true,
+            IsFetchEnabled = true, // 面板 fetch/XHR 直打 clash://console
+            IsCSPBypassing = true, // 面板页自带 CSP 不能拦掉 WS shim 的桥接请求
+        });
+
         // 代理：manual 直连用户的 SOCKS/HTTP 端口；singbox 经内置 sing-box 内核中转。
         // 经 CEF 'proxy' preference 下发（启动即设一次，此后修改即时生效）。
         // 不能走 --proxy-server 启动参数：命令行设定的 preference 之后无法再被修改
